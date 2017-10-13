@@ -32,12 +32,13 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "vendor_init.h"
+#include <android-base/properties.h>
 #include "property_service.h"
-#include "log.h"
-#include "util.h"
+#include "vendor_init.h"
 
 #define DEVINFO_FILE "/dev/block/bootdevice/by-name/devinfo"
+
+using android::base::SetProperty
 
 static int read_file2(const char *fname, char *data, int max_size)
 {
@@ -84,39 +85,39 @@ void init_alarm_boot_properties()
          * 8 -> KPDPWR_N pin toggled (power key pressed)
          */
         if (buf[0] == '0') {
-            property_set("ro.boot.bootreason", "invalid");
-            property_set("ro.alarm_boot", "false");
+            SetProperty("ro.boot.bootreason", "invalid");
+            SetProperty("ro.alarm_boot", "false");
         }
         else if (buf[0] == '1') {
-            property_set("ro.boot.bootreason", "hard_reset");
-            property_set("ro.alarm_boot", "false");
+            SetProperty("ro.boot.bootreason", "hard_reset");
+            SetProperty("ro.alarm_boot", "false");
         }
         else if (buf[0] == '2') {
-            property_set("ro.boot.bootreason", "smpl");
-            property_set("ro.alarm_boot", "false");
+            SetProperty("ro.boot.bootreason", "smpl");
+            SetProperty("ro.alarm_boot", "false");
         }
         else if (buf[0] == '3'){
-            property_set("ro.alarm_boot", "true");
+            SetProperty("ro.alarm_boot", "true");
         }
         else if (buf[0] == '4') {
-            property_set("ro.boot.bootreason", "dc_chg");
-            property_set("ro.alarm_boot", "false");
+            SetProperty("ro.boot.bootreason", "dc_chg");
+            SetProperty("ro.alarm_boot", "false");
         }
         else if (buf[0] == '5') {
-            property_set("ro.boot.bootreason", "usb_chg");
-            property_set("ro.alarm_boot", "false");
+            SetProperty("ro.boot.bootreason", "usb_chg");
+            SetProperty("ro.alarm_boot", "false");
         }
         else if (buf[0] == '6') {
-            property_set("ro.boot.bootreason", "pon1");
-            property_set("ro.alarm_boot", "false");
+            SetProperty("ro.boot.bootreason", "pon1");
+            SetProperty("ro.alarm_boot", "false");
         }
         else if (buf[0] == '7') {
-            property_set("ro.boot.bootreason", "cblpwr");
-            property_set("ro.alarm_boot", "false");
+            SetProperty("ro.boot.bootreason", "cblpwr");
+            SetProperty("ro.alarm_boot", "false");
         }
         else if (buf[0] == '8') {
-            property_set("ro.boot.bootreason", "kpdpwr");
-            property_set("ro.alarm_boot", "false");
+            SetProperty("ro.boot.bootreason", "kpdpwr");
+            SetProperty("ro.alarm_boot", "false");
         }
     }
 }
@@ -126,7 +127,7 @@ void vendor_load_properties() {
     int isX520 = 0, isX522 = 0, isX526 = 0, isX527 = 0;
 
     // Default props
-    property_set("ro.thermanager.config", "/system/etc/thermanager.xml");
+    SetProperty("ro.thermanager.config", "/system/etc/thermanager.xml");
 
     if (read_file2(DEVINFO_FILE, device, sizeof(device)))
     {
@@ -151,28 +152,28 @@ void vendor_load_properties() {
     if (isX520)
     {
         // This is X520
-        property_set("ro.product.model", "X520");
+        SetProperty("ro.product.model", "X520");
     }
     else if (isX522)
     {
         // This is X522
-        property_set("ro.product.model", "X522");
+        SetProperty("ro.product.model", "X522");
     }
     else if (isX526)
     {
         // This is X526
-        property_set("ro.product.model", "X526");
-        property_set("ro.thermanager.config", "/system/etc/thermanager_X526.xml");
+        SetProperty("ro.product.model", "X526");
+        SetProperty("ro.thermanager.config", "/system/etc/thermanager_X526.xml");
     }
     else if (isX527)
     {
         // This is X527
-        property_set("ro.product.model", "X527");
+        SetProperty("ro.product.model", "X527");
     }
     else
     {
         // Unknown variant
-        property_set("ro.product.model", "X52X");
+        SetProperty("ro.product.model", "X52X");
     }
 
     init_alarm_boot_properties();
