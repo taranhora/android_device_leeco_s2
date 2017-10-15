@@ -151,6 +151,10 @@ PRODUCT_PACKAGES += \
     libmmjpeg_interface
 #    camera.msm8952.so \
 
+# Bluetooth
+PRODUCT_PACKAGES += \
+    libbt-vendor
+
 # Charger
 PRODUCT_PACKAGES += \
     charger_res_images
