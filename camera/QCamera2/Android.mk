@@ -11,6 +11,7 @@ LOCAL_SRC_FILES := \
         util/QCameraCmdThread.cpp \
         util/QCameraQueue.cpp \
         util/QCameraBufferMaps.cpp \
+        util/QCameraFlash.cpp \
         QCamera2Hal.cpp \
         QCamera2Factory.cpp
 
@@ -57,6 +58,7 @@ LOCAL_C_INCLUDES := \
         $(LOCAL_PATH)/../mm-image-codec/qexif \
         $(LOCAL_PATH)/../mm-image-codec/qomx_core \
         $(LOCAL_PATH)/util \
+        device/leeco/s2/camera/QCamera2/HAL3 \
         hardware/qcom/media-caf/msm8952/mm-core/inc
 
 #HAL 1.0 Include paths
@@ -71,6 +73,26 @@ ifeq ($(TARGET_TS_MAKEUP),true)
 LOCAL_CFLAGS += -DTARGET_TS_MAKEUP
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/HAL/tsMakeuplib/include
 endif
+
+ifeq ($(TARGET_FLASHLIGHT_CONTROL),true)
+LOCAL_CFLAGS += -DFLASHLIGHT_CONTROL
+ifdef TARGET_FLASHLIGHT_CONTROL_ID
+LOCAL_CFLAGS += -DFLASHLIGHT_CONTROL_ID=$(TARGET_FLASHLIGHT_CONTROL_ID)
+endif
+ifdef TARGET_FLASHLIGHT_CONTROL_PATH
+LOCAL_CFLAGS += -DFLASHLIGHT_CONTROL_PATH=\"$(TARGET_FLASHLIGHT_CONTROL_PATH)\"
+endif
+ifdef TARGET_FLASHLIGHT_CURRENT_VALUE0
+LOCAL_CFLAGS += -DFLASHLIGHT_CURRENT_VALUE0=$(TARGET_FLASHLIGHT_CURRENT_VALUE0)
+endif
+ifdef TARGET_FLASHLIGHT_CURRENT_VALUE1
+LOCAL_CFLAGS += -DFLASHLIGHT_CURRENT_VALUE1=$(TARGET_FLASHLIGHT_CURRENT_VALUE1)
+endif
+ifdef TARGET_FLASHLIGHT_CURRENT_VALUE2
+LOCAL_CFLAGS += -DFLASHLIGHT_CURRENT_VALUE2=$(TARGET_FLASHLIGHT_CURRENT_VALUE2)
+endif
+endif
+
 ifneq (,$(filter msm8974 msm8916 msm8226 msm8610 msm8916 apq8084 msm8084 msm8994 msm8992 msm8952 msm8996,$(TARGET_BOARD_PLATFORM)))
     LOCAL_CFLAGS += -DVENUS_PRESENT
 endif
@@ -82,6 +104,8 @@ endif
 ifeq (1,$(filter 1,$(shell echo "$$(( $(PLATFORM_SDK_VERSION) <= 22 ))" )))
 LOCAL_CFLAGS += -DUSE_L_MR1
 endif
+
+LOCAL_CFLAGS += -DVANILLA_HAL
 
 #LOCAL_STATIC_LIBRARIES := libqcamera2_util
 LOCAL_C_INCLUDES += \
@@ -98,8 +122,10 @@ endif
 LOCAL_CLANG := false
 
 LOCAL_MODULE_RELATIVE_PATH := hw
+LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE := camera.$(TARGET_BOARD_PLATFORM)
 LOCAL_MODULE_TAGS := optional
+LOCAL_PROPRIETARY_MODULE := true
 
 LOCAL_32_BIT_ONLY := $(BOARD_QTI_CAMERA_32BIT_ONLY)
 include $(BUILD_SHARED_LIBRARY)

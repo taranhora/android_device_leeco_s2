@@ -40,6 +40,7 @@
 
 #include "QCameraMuxer.h"
 #include "QCamera2HWI.h"
+#include "QCamera3HWI.h"
 #include "QCameraPostProc.h"
 
 #include <sys/stat.h>
@@ -223,13 +224,12 @@ int QCameraMuxer::get_camera_info(int camera_id, struct camera_info *info)
 {
     int rc = NO_ERROR;
     CDBG_HIGH("%s: E", __func__);
-    cam_sync_type_t type;
     if ((camera_id < 0) || (camera_id >= gMuxer->getNumberOfCameras())) {
         ALOGE("%s : Camera id %d not found!", __func__, camera_id);
         return -ENODEV;
     }
     if(info) {
-        rc = gMuxer->getCameraInfo(camera_id, info, &type);
+        rc = gMuxer->getCameraInfo(camera_id, info);
     }
     CDBG_HIGH("%s: X, rc: %d", __func__, rc);
     return rc;
@@ -1720,7 +1720,7 @@ int QCameraMuxer::close_camera_device(hw_device_t *hw_dev)
         CHECK_CAMERA_ERROR(pCam);
 
         hw_device_t *dev = (hw_device_t*)(pCam->dev);
-        CDBG_HIGH("%s: hw device %x, hw %x", __func__, dev, pCam->hwi);
+        CDBG_HIGH("%s: hw device %p, hw %p", __func__, dev, pCam->hwi);
 
         rc = QCamera2HardwareInterface::close_camera_device(dev);
         if (rc != NO_ERROR) {
@@ -1905,8 +1905,7 @@ int QCameraMuxer::getNumberOfCameras()
  *              NO_ERROR  -- success
  *              none-zero failure code
  *==========================================================================*/
-int QCameraMuxer::getCameraInfo(int camera_id,
-        struct camera_info *info, cam_sync_type_t *p_cam_type)
+int QCameraMuxer::getCameraInfo(int camera_id, struct camera_info *info)
 {
     int rc = NO_ERROR;
     CDBG_HIGH("%s: E, camera_id = %d", __func__, camera_id);
@@ -1926,7 +1925,10 @@ int QCameraMuxer::getCameraInfo(int camera_id,
     uint32_t phy_id =
             m_pLogicalCamera[camera_id].pId[
             m_pLogicalCamera[camera_id].nPrimaryPhyCamIndex];
-    rc = QCamera2HardwareInterface::getCapabilities(phy_id, info, &cam_type);
+    // Call HAL3 getCamInfo to get the flash light info through static metatdata
+    // regardless of HAL version
+    rc = QCamera3HardwareInterface::getCamInfo(phy_id, info);
+    info->device_version = CAMERA_DEVICE_API_VERSION_1_0; // Hardcode the HAL to HAL1
     CDBG_HIGH("%s: X", __func__);
     return rc;
 }
@@ -2154,7 +2156,7 @@ int QCameraMuxer::cameraDeviceOpen(int camera_id,
             m_pPhyCamera[phyId].dev = reinterpret_cast<camera_device_t*>(hw_dev[i]);
             m_pPhyCamera[phyId].hwi = hw;
             cam->sId[i] = m_pPhyCamera[phyId].camera_server_id;
-            CDBG_HIGH("%s: camera id %d server id : %d hw device %x, hw %x",
+            CDBG_HIGH("%s: camera id %d server id : %d hw device %p, hw %p",
                     __func__, phyId, cam->sId[i], hw_dev[i], hw);
         }
     } else {

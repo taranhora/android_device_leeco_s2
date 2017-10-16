@@ -36,7 +36,7 @@
 #include <stdlib.h>
 #include <utils/Errors.h>
 #include <gralloc_priv.h>
-#include <gui/Surface.h>
+#include "util/QCameraFlash.h"
 #include <binder/Parcel.h>
 #include <binder/IServiceManager.h>
 #include <utils/RefBase.h>
@@ -1805,6 +1805,14 @@ int QCamera2HardwareInterface::openCamera()
         return ALREADY_EXISTS;
     }
 
+    rc = QCameraFlash::getInstance().reserveFlashForCamera(mCameraId);
+    if (rc < 0) {
+        ALOGE("%s: Failed to reserve flash for camera id: %d",
+                __func__,
+                mCameraId);
+        return UNKNOWN_ERROR;
+    }
+
     // alloc param buffer
     DeferWorkArgs args;
     memset(&args, 0, sizeof(args));
@@ -2184,6 +2192,13 @@ int QCamera2HardwareInterface::closeCamera()
         free(mExifParams.debug_params);
         mExifParams.debug_params = NULL;
     }
+
+    if (QCameraFlash::getInstance().releaseFlashFromCamera(mCameraId) != 0) {
+        CDBG("%s: Failed to release flash for camera id: %d",
+                __func__,
+                mCameraId);
+    }
+
     ALOGI("[KPI Perf] %s: X PROFILE_CLOSE_CAMERA camera id %d, rc: %d",
         __func__, mCameraId, rc);
 
@@ -2599,6 +2614,7 @@ QCameraMemory *QCamera2HardwareInterface::allocateStreamBuf(
         {
             if (isNoDisplayMode()) {
                 mem = new QCameraStreamMemory(mGetMemory,
+                        mCallbackCookie,
                         bCachedMem,
                         (bPoolMem) ? &m_memoryPool : NULL,
                         stream_type);
@@ -2606,7 +2622,7 @@ QCameraMemory *QCamera2HardwareInterface::allocateStreamBuf(
                 cam_dimension_t dim;
                 int minFPS, maxFPS;
                 QCameraGrallocMemory *grallocMemory =
-                    new QCameraGrallocMemory(mGetMemory);
+                    new QCameraGrallocMemory(mGetMemory, mCallbackCookie);
 
                 mParameters.getStreamDimension(stream_type, dim);
                 /* we are interested only in maxfps here */
@@ -2643,12 +2659,12 @@ QCameraMemory *QCamera2HardwareInterface::allocateStreamBuf(
     case CAM_STREAM_TYPE_POSTVIEW:
         {
             if (isNoDisplayMode() || isPreviewRestartEnabled()) {
-                mem = new QCameraStreamMemory(mGetMemory, bCachedMem);
+                mem = new QCameraStreamMemory(mGetMemory, mCallbackCookie, bCachedMem);
             } else {
                 cam_dimension_t dim;
                 int minFPS, maxFPS;
                 QCameraGrallocMemory *grallocMemory =
-                        new QCameraGrallocMemory(mGetMemory);
+                        new QCameraGrallocMemory(mGetMemory, mCallbackCookie);
 
                 mParameters.getStreamDimension(stream_type, dim);
                 /* we are interested only in maxfps here */
@@ -2667,6 +2683,7 @@ QCameraMemory *QCamera2HardwareInterface::allocateStreamBuf(
     case CAM_STREAM_TYPE_RAW:
     case CAM_STREAM_TYPE_OFFLINE_PROC:
         mem = new QCameraStreamMemory(mGetMemory,
+                mCallbackCookie,
                 bCachedMem,
                 (bPoolMem) ? &m_memoryPool : NULL,
                 stream_type);
@@ -2707,7 +2724,7 @@ QCameraMemory *QCamera2HardwareInterface::allocateStreamBuf(
             CDBG_HIGH("%s: %s video buf allocated ", __func__,
                     (bCachedMem == 0) ? "Uncached" : "Cached" );
             QCameraVideoMemory *videoMemory =
-                    new QCameraVideoMemory(mGetMemory, bCachedMem);
+                    new QCameraVideoMemory(mGetMemory, mCallbackCookie, bCachedMem);
 
             int usage = 0;
             cam_format_t fmt;
@@ -2721,6 +2738,7 @@ QCameraMemory *QCamera2HardwareInterface::allocateStreamBuf(
         break;
     case CAM_STREAM_TYPE_CALLBACK:
         mem = new QCameraStreamMemory(mGetMemory,
+                mCallbackCookie,
                 bCachedMem,
                 (bPoolMem) ? &m_memoryPool : NULL,
                 stream_type);
@@ -2938,7 +2956,7 @@ QCameraHeapMemory *QCamera2HardwareInterface::allocateStreamInfoBuf(
             mParameters.getHfrFps(pFpsRange);
             streamInfo->user_buf_info.frameInterval =
                     (long)((1000/pFpsRange.video_max_fps) * 1000);
-            CDBG_HIGH("%s: Video Batch Count = %d, interval = %d", __func__,
+            CDBG_HIGH("%s: Video Batch Count = %d, interval = %ld", __func__,
                     streamInfo->user_buf_info.frame_buf_cnt,
                     streamInfo->user_buf_info.frameInterval);
         }
@@ -3035,7 +3053,7 @@ QCameraMemory *QCamera2HardwareInterface::allocateStreamUserBuf(
     switch (streamInfo->stream_type) {
     case CAM_STREAM_TYPE_VIDEO: {
         QCameraVideoMemory *video_mem = new QCameraVideoMemory(
-                mGetMemory, FALSE, CAM_STREAM_BUF_TYPE_USERPTR);
+                mGetMemory, mCallbackCookie, FALSE, CAM_STREAM_BUF_TYPE_USERPTR);
         video_mem->allocateMeta(streamInfo->num_bufs);
         mem = static_cast<QCameraMemory *>(video_mem);
     }
@@ -5304,6 +5322,83 @@ int QCamera2HardwareInterface::sendCommand(int32_t command,
         rc = setHistogram(command == CAMERA_CMD_HISTOGRAM_ON? true : false);
         CDBG_HIGH("%s: Histogram -> %s", __func__,
               mParameters.isHistogramEnabled() ? "Enabled" : "Disabled");
+        break;
+#else
+    case CAMERA_CMD_LONGSHOT_ON:
+        arg1 = arg2 = 0;
+        // Longshot can only be enabled when image capture
+        // is not active.
+        if ( !m_stateMachine.isCaptureRunning() && m_stateMachine.isPreviewRunning() ) {
+            if (!mLongshotEnabled) {
+                CDBG_HIGH("%s: Longshot Enabled", __func__);
+                mLongshotEnabled = true;
+                pthread_mutex_lock(&m_parm_lock);
+                rc = mParameters.setLongshotEnable(mLongshotEnabled);
+                pthread_mutex_unlock(&m_parm_lock);
+
+                // Due to recent buffer count optimizations
+                // ZSL might run with considerably less buffers
+                // when not in longshot mode. Preview needs to
+                // restart in this case.
+                if (isZSLMode()) {
+                    QCameraChannel *pChannel = NULL;
+                    QCameraStream *pSnapStream = NULL;
+                    pChannel = m_channels[QCAMERA_CH_TYPE_ZSL];
+                    if (NULL != pChannel) {
+                        QCameraStream *pStream = NULL;
+                        for (uint32_t i = 0; i < pChannel->getNumOfStreams(); i++) {
+                            pStream = pChannel->getStreamByIndex(i);
+                            if (pStream != NULL) {
+                                if (pStream->isTypeOf(CAM_STREAM_TYPE_SNAPSHOT)) {
+                                    pSnapStream = pStream;
+                                    break;
+                                }
+                            }
+                        }
+                        if (NULL != pSnapStream) {
+                            uint8_t required = 0;
+                            required = getBufNumRequired(CAM_STREAM_TYPE_SNAPSHOT);
+                            if (pSnapStream->getBufferCount() < required) {
+                                // We restart here, to reset the FPS and no
+                                // of buffers as per the requirement of longshot usecase.
+                                arg1 = QCAMERA_SM_EVT_RESTART_PERVIEW;
+                                if (getRelatedCamSyncInfo()->sync_control ==
+                                        CAM_SYNC_RELATED_SENSORS_ON) {
+                                    arg2 = QCAMERA_SM_EVT_DELAYED_RESTART;
+                                }
+                            }
+                        }
+                    }
+                }
+                //
+                mPrepSnapRun = false;
+                mCACDoneReceived = FALSE;
+            }
+        } else {
+            rc = NO_INIT;
+        }
+        break;
+    case CAMERA_CMD_LONGSHOT_OFF:
+        arg1 = arg2 = 0;
+        if ( mLongshotEnabled ) {
+            if ( m_stateMachine.isCaptureRunning() ) {
+                cancelPicture();
+                processEvt(QCAMERA_SM_EVT_SNAPSHOT_DONE, NULL);
+                QCameraChannel *pZSLChannel = m_channels[QCAMERA_CH_TYPE_ZSL];
+                if (isZSLMode() && (NULL != pZSLChannel) && mPrepSnapRun) {
+                    mCameraHandle->ops->stop_zsl_snapshot(
+                        mCameraHandle->camera_handle,
+                        pZSLChannel->getMyHandle());
+                }
+            }
+            mPrepSnapRun = false;
+            CDBG_HIGH("%s: Longshot Disabled", __func__);
+            mLongshotEnabled = false;
+            pthread_mutex_lock(&m_parm_lock);
+            rc = mParameters.setLongshotEnable(mLongshotEnabled);
+            pthread_mutex_unlock(&m_parm_lock);
+            mCACDoneReceived = FALSE;
+        }
         break;
 #endif
     case CAMERA_CMD_START_FACE_DETECTION:
@@ -7960,13 +8055,13 @@ int32_t QCamera2HardwareInterface::processFaceDetectionResult(cam_face_detection
             faces[i].mouth[1] =
                 MAP_TO_DRIVER_COORDINATE(fd_data->faces[i].mouth_center.y, display_dim.height, 2000, -1000);
 
-#ifndef VANILLA_HAL
 #ifdef TARGET_TS_MAKEUP
             mFaceRect.left = fd_data->faces[i].face_boundary.left;
             mFaceRect.top = fd_data->faces[i].face_boundary.top;
             mFaceRect.right = fd_data->faces[i].face_boundary.width+mFaceRect.left;
             mFaceRect.bottom = fd_data->faces[i].face_boundary.height+mFaceRect.top;
 #endif
+#ifndef VANILLA_HAL
             faces[i].smile_degree = fd_data->faces[i].smile_degree;
             faces[i].smile_score = fd_data->faces[i].smile_confidence;
             faces[i].blink_detected = fd_data->faces[i].blink_detected;
@@ -8366,12 +8461,33 @@ int QCamera2HardwareInterface::updateThermalLevel(void *thermal_level)
  *==========================================================================*/
 int QCamera2HardwareInterface::updateParameters(const char *parms, bool &needRestart)
 {
-    int rc = NO_ERROR;
+    int final_rc = NO_ERROR;
+    int rc;
 
-    pthread_mutex_lock(&m_parm_lock);
     String8 str = String8(parms);
     QCameraParameters param(str);
-    rc =  mParameters.updateParameters(param, needRestart);
+
+#ifdef VANILLA_HAL
+    const char *longshot = param.get(QCameraParameters::KEY_QC_LONG_SHOT);
+    int32_t arg1 = 0, arg2 = 0;
+    if (longshot != NULL) {
+        if (!strcmp(longshot, QCameraParameters::VALUE_ON))
+            rc = sendCommand(CAMERA_CMD_LONGSHOT_ON, arg1, arg2);
+        else
+            rc = sendCommand(CAMERA_CMD_LONGSHOT_OFF, arg1, arg2);
+        if (rc == NO_ERROR) {
+            if (arg1 == QCAMERA_SM_EVT_RESTART_PERVIEW)
+                needRestart = true;
+        } else {
+            param.remove(QCameraParameters::KEY_QC_LONG_SHOT);
+            final_rc = rc;
+        }
+    }
+#endif
+
+    pthread_mutex_lock(&m_parm_lock);
+    if ((rc = mParameters.updateParameters(param, needRestart)))
+        final_rc = rc;
 
     // update stream based parameter settings
     for (int i = 0; i < QCAMERA_CH_TYPE_MAX; i++) {
@@ -8381,7 +8497,7 @@ int QCamera2HardwareInterface::updateParameters(const char *parms, bool &needRes
     }
     pthread_mutex_unlock(&m_parm_lock);
 
-    return rc;
+    return final_rc;
 }
 
 /*===========================================================================
@@ -9192,7 +9308,7 @@ void *QCamera2HardwareInterface::deferredWorkRoutine(void *obj)
                                 pme);
                         rc = pme->mParameters.getRelatedCamCalibration(
                             &(pme->mJpegMetadata.otp_calibration_data));
-                        CDBG("%s: Dumping Calibration Data Version Id %f rc %d",
+                        CDBG("%s: Dumping Calibration Data Version Id %d rc %d",
                                 __func__,
                                 pme->mJpegMetadata.otp_calibration_data.calibration_format_version,
                                 rc);
@@ -9417,7 +9533,7 @@ int32_t QCamera2HardwareInterface::getJpegHandleInfo(mm_jpeg_ops_t *ops,
         memcpy(ops, &mJpegHandle, sizeof(mm_jpeg_ops_t));
         memcpy(mpo_ops, &mJpegMpoHandle, sizeof(mm_jpeg_mpo_ops_t));
         *pJpegClientHandle = mJpegClientHandle;
-        CDBG_HIGH("%s: Getting JPEG client handle %d", __func__,
+        CDBG_HIGH("%s: Getting JPEG client handle %p", __func__,
                 pJpegClientHandle);
         return NO_ERROR;
     } else {

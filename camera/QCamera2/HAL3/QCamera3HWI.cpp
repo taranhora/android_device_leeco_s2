@@ -42,6 +42,7 @@
 #include <utils/Errors.h>
 #include <ui/Fence.h>
 #include <gralloc_priv.h>
+#include "util/QCameraFlash.h"
 #include "QCamera3HWI.h"
 #include "QCamera3Mem.h"
 #include "QCamera3Channel.h"
@@ -599,11 +600,21 @@ int QCamera3HardwareInterface::openCamera()
         ALOGE("Failure: Camera already opened");
         return ALREADY_EXISTS;
     }
+
+    rc = QCameraFlash::getInstance().reserveFlashForCamera(mCameraId);
+    if (rc < 0) {
+        ALOGE("%s: Failed to reserve flash for camera id: %d",
+                __func__,
+                mCameraId);
+        return UNKNOWN_ERROR;
+    }
+
     rc = camera_open((uint8_t)mCameraId, &mCameraHandle);
     if (rc) {
         ALOGE("camera_open failed. rc = %d, mCameraHandle = %p", rc, mCameraHandle);
         return rc;
     }
+
     if (!mCameraHandle) {
         ALOGE("camera_open failed. mCameraHandle = %p", mCameraHandle);
         return -ENODEV;
@@ -702,6 +713,11 @@ int QCamera3HardwareInterface::closeCamera()
     if (mExifParams.debug_params) {
         free(mExifParams.debug_params);
         mExifParams.debug_params = NULL;
+    }
+    if (QCameraFlash::getInstance().releaseFlashFromCamera(mCameraId) != 0) {
+        CDBG("%s: Failed to release flash for camera id: %d",
+                __func__,
+                mCameraId);
     }
 
     return rc;
@@ -1051,7 +1067,6 @@ int QCamera3HardwareInterface::configureStreams(
     // Number of streams on ISP encoder path
     size_t numStreamsOnEncoder = 0;
     cam_dimension_t maxViewfinderSize;
-    bool bJpegExceeds4K = false;
     bool bUseCommonFeatureMask = false;
     bool bSmallJpegSize = false;
     uint8_t maxDownscaleFactor = 1;
@@ -1127,19 +1142,10 @@ int QCamera3HardwareInterface::configureStreams(
     /* stream configurations */
     for (size_t i = 0; i < streamList->num_streams; i++) {
         camera3_stream_t *newStream = streamList->streams[i];
-        ALOGI("%s: stream[%d] type = %d, format = %d, width = %d, height = %d",
-                __func__, i, newStream->stream_type, newStream->format,
-                newStream->width, newStream->height);
         if (newStream->stream_type == CAMERA3_STREAM_BIDIRECTIONAL &&
                 newStream->format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED){
             isZsl = true;
         }
-        if (newStream->format == HAL_PIXEL_FORMAT_BLOB) {
-            if (newStream->width > VIDEO_4K_WIDTH ||
-                    newStream->height > VIDEO_4K_HEIGHT)
-                bJpegExceeds4K = true;
-        }
-
         if ((HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED == newStream->format) &&
                 (newStream->usage & private_handle_t::PRIV_FLAGS_VIDEO_ENCODER)) {
             m_bIsVideo = true;
@@ -1234,13 +1240,6 @@ int QCamera3HardwareInterface::configureStreams(
         bUseCommonFeatureMask = true;
         CDBG_HIGH("%s: Multiple streams above max viewfinder size, common mask needed",
                 __func__);
-    }
-    /* Check if BLOB size is greater than 4k in 4k recording case */
-    if (m_bIs4KVideo && bJpegExceeds4K) {
-        ALOGE("%s: HAL doesn't support Blob size greater than 4k in 4k recording",
-                __func__);
-        pthread_mutex_unlock(&mMutex);
-        return -EINVAL;
     }
 
     rc = validateStreamDimensions(streamList);
@@ -6437,6 +6436,11 @@ int QCamera3HardwareInterface::getCamInfo(uint32_t cameraId,
     info->orientation = (int)gCamCapability[cameraId]->sensor_mount_angle;
     info->device_version = CAMERA_DEVICE_API_VERSION_3_2;
     info->static_camera_characteristics = gStaticMetadata[cameraId];
+
+    //assume both cameras cannot operate independently.
+    info->resource_cost = 100;
+    info->conflicting_devices = NULL;
+    info->conflicting_devices_length = 0;
 
     pthread_mutex_unlock(&gCamLock);
 

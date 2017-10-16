@@ -34,6 +34,7 @@
 #include <cstdlib>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <hardware/camera3.h>
 #include <system/camera_metadata.h>
 #include <gralloc_priv.h>
@@ -524,7 +525,7 @@ void QCamera3Channel::dumpYUV(mm_camera_buf_def_t *frame, cam_dimension_t dim,
                         }
                     }
                     CDBG_HIGH("%s: written number of bytes %ld\n",
-                             __func__, written_len);
+                             __func__, (long)written_len);
                     dumpFrmCnt++;
                     close(file_fd);
                 } else {
