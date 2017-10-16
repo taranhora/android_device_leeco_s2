@@ -189,6 +189,7 @@ WPA_SUPPLICANT_VERSION := VER_0_8_X
 TARGET_USES_WCNSS_MAC_ADDR_REV := true
 
 # Cyanogen hardware
+BOARD_USES_CYANOGEN_HARDWARE := true
 BOARD_HARDWARE_CLASS += device/leeco/s2/cmhw
 
 # Enable dexpreopt to speed boot time
