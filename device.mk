@@ -279,12 +279,18 @@ PRODUCT_COPY_FILES += \
 PRODUCT_PACKAGES += \
     libcnefeatureconfig \
     librmnetctl \
-    libxml2 \
-    telephony-ext \
-    libminui
+    libxml2
+
+# Telephony
+PRODUCT_PACKAGES += \
+    telephony-ext
 
 PRODUCT_BOOT_JARS += \
     telephony-ext
+
+# Recovery
+PRODUCT_PACKAGES += \
+    libminui
 
 # Sensors
 PRODUCT_COPY_FILES += \
