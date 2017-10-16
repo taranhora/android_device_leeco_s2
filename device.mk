@@ -142,10 +142,7 @@ PRODUCT_COPY_FILES += \
 # Camera
 PRODUCT_PACKAGES += \
     Snap \
-    libqomx_core \
-    libmmcamera_interface \
-    libmmjpeg_interface
-#    camera.msm8952.so \
+    camera.msm8952.so
 
 # Bluetooth
 PRODUCT_PACKAGES += \
@@ -214,7 +211,6 @@ PRODUCT_PACKAGES += \
 # Libshims
 PRODUCT_PACKAGES += \
     libshims_camera \
-    libshims_cameraservice \
     libshims_ims \
     rild_socket
 
