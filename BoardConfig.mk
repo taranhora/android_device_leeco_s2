@@ -97,7 +97,6 @@ CM_POWERHAL_EXTENSION := qcom
 TARGET_POWERHAL_SET_INTERACTIVE_EXT := device/leeco/s2/power/power_ext.c
 
 # RIL
-BOARD_PROVIDES_LIBRIL := true
 TARGET_RIL_VARIANT := caf
 
 # Adreno
