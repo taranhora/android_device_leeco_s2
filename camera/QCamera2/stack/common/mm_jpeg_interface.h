@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -29,6 +29,11 @@
 
 #ifndef MM_JPEG_INTERFACE_H_
 #define MM_JPEG_INTERFACE_H_
+
+// System dependencies
+#include <stdbool.h>
+
+// Camera dependencies
 #include "QOMX_JpegExtensions.h"
 #include "cam_intf.h"
 
@@ -54,11 +59,17 @@ typedef struct {
   cam_af_exif_debug_t af_debug_params;
   cam_asd_exif_debug_t asd_debug_params;
   cam_stats_buffer_exif_debug_t stats_debug_params;
+  cam_bestats_buffer_exif_debug_t bestats_debug_params;
+  cam_bhist_buffer_exif_debug_t bhist_debug_params;
+  cam_q3a_tuning_info_t q3a_tuning_debug_params;
   uint8_t ae_debug_params_valid;
   uint8_t awb_debug_params_valid;
   uint8_t af_debug_params_valid;
   uint8_t asd_debug_params_valid;
   uint8_t stats_debug_params_valid;
+  uint8_t bestats_debug_params_valid;
+  uint8_t bhist_debug_params_valid;
+  uint8_t q3a_tuning_debug_params_valid;
 } mm_jpeg_debug_exif_params_t;
 
 typedef struct {
@@ -69,15 +80,18 @@ typedef struct {
 } mm_jpeg_exif_params_t;
 
 typedef struct {
-  /* Indicates if it is a single jpeg or part of a multi picture sequence*/
+  /* Indicates if it is a single jpeg or part of a multi picture sequence */
   mm_jpeg_image_type_t type;
 
-  /*Indicates if image is the primary image in a sequence of images.
-  Applicable only to multi picture formats*/
+  /* Indicates if image is the primary image in a sequence of images.
+  Applicable only to multi picture formats */
   uint8_t is_primary;
 
-  /*Number of images in the sequence*/
+  /* Number of images in the sequence */
   uint32_t num_of_images;
+
+  /* Flag to indicate if multi picture metadata need to be added to Exif */
+  uint8_t enable_metadata;
 } mm_jpeg_multi_image_t;
 
 typedef struct {
@@ -199,6 +213,9 @@ typedef struct {
 
   /* release memory function ptr */
   int (*put_memory)( omx_jpeg_ouput_buf_t *p_out_buf);
+
+  /* Flag to indicate whether to generate thumbnail from postview */
+  bool thumb_from_postview;
 } mm_jpeg_encode_params_t;
 
 typedef struct {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -30,17 +30,12 @@
 #ifndef __MM_QCAMERA_APP_H__
 #define __MM_QCAMERA_APP_H__
 
+// System dependencies
 #include <pthread.h>
-#include <errno.h>
-#include <sys/ioctl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <linux/fb.h>
+#include <linux/msm_ion.h>
 #include <linux/msm_mdp.h>
-#include <semaphore.h>
 
+// Camera dependencies
 #include "mm_camera_interface.h"
 #include "mm_jpeg_interface.h"
 #include "mm_qcamera_socket.h"
@@ -66,7 +61,7 @@
 #define DEFAULT_VIDEO_HEIGHT      480
 #define DEFAULT_VIDEO_PADDING     CAM_PAD_TO_2K
 #define DEFAULT_SNAPSHOT_FORMAT   CAM_FORMAT_YUV_420_NV21
-#define DEFAULT_RAW_FORMAT        CAM_FORMAT_BAYER_QCOM_RAW_10BPP_GBRG
+#define DEFAULT_RAW_FORMAT        CAM_FORMAT_BAYER_MIPI_RAW_10BPP_GBRG
 
 #define DEFAULT_SNAPSHOT_WIDTH    4160
 #define DEFAULT_SNAPSHOT_HEIGHT   3120
@@ -245,6 +240,7 @@ typedef struct {
     int32_t reproc_sharpness;
     cam_denoise_param_t reproc_wnr;
     int8_t enable_CAC;
+    int8_t enable_EZTune;
     mm_camera_queue_t pp_frames;
     mm_camera_stream_t *reproc_stream;
     metadata_buffer_t *metadata;
@@ -320,6 +316,7 @@ typedef enum {
     MM_CAMERA_LIB_FPS_RANGE,
     MM_CAMERA_LIB_WNR_ENABLE,
     MM_CAMERA_LIB_SET_TINTLESS,
+    MM_CAMERA_LIB_EZTUNE_ENABLE,
 } mm_camera_lib_commands;
 
 typedef struct {

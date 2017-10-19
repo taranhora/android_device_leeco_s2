@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, The Linux Foundataion. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -29,8 +29,7 @@
 #ifndef __QCAMERAMUXER_H__
 #define __QCAMERAMUXER_H__
 
-#include <hardware/camera.h>
-#include <system/camera.h>
+#include "camera.h"
 #include "QCamera2HWI.h"
 #include "QCamera3HWI.h"
 
@@ -222,7 +221,6 @@ private:
     qcamera_physical_descriptor_t *m_pPhyCamera;
     qcamera_logical_descriptor_t *m_pLogicalCamera;
     const camera_module_callbacks_t *m_pCallbacks;
-    bool m_bDualCameraEnabled;
     bool m_bAuxCameraExposed;
     uint8_t m_nPhyCameras;
     uint8_t m_nLogicalCameras;
@@ -256,7 +254,8 @@ private:
     int setupLogicalCameras();
     int cameraDeviceOpen(int camera_id, struct hw_device_t **hw_device);
     int getNumberOfCameras();
-    int getCameraInfo(int camera_id, struct camera_info *info);
+    int getCameraInfo(int camera_id, struct camera_info *info,
+            cam_sync_type_t *p_cam_type);
     int32_t setCallbacks(const camera_module_callbacks_t *callbacks);
     int32_t setDataCallback(camera_data_callback data_cb);
     int32_t setMemoryCallback(camera_request_memory get_memory);

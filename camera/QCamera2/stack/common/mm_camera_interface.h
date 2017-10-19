@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -29,10 +29,11 @@
 
 #ifndef __MM_CAMERA_INTERFACE_H__
 #define __MM_CAMERA_INTERFACE_H__
-#include <linux/msm_ion.h>
-#include <linux/videodev2.h>
+
+// System dependencies
 #include <media/msmb_camera.h>
-#include <utils/Timers.h>
+
+// Camera dependencies
 #include "cam_intf.h"
 #include "cam_queue.h"
 
@@ -44,6 +45,8 @@
 #define PAD_TO_SIZE(size, padding) \
         ((size + (typeof(size))(padding - 1)) & \
         (typeof(size))(~(padding - 1)))
+
+#define CEIL_DIVISION(n, d) ((n+d-1)/d)
 
 /** CAM_DUMP_TO_FILE:
  *  @filename: file name
@@ -65,10 +68,10 @@
   FILE *fp = fopen(filename, "w+"); \
   if (fp) { \
     rc = fwrite(p_addr, 1, len, fp); \
-    ALOGE("%s:%d] written size %d", __func__, __LINE__, len); \
+    LOGE("written size %d", len); \
     fclose(fp); \
   } else { \
-    ALOGE("%s:%d] open %s failed", __func__, __LINE__, filename); \
+    LOGE("open %s failed", filename); \
   } \
 })
 
@@ -116,6 +119,7 @@ typedef struct {
 *    @frame_len : length of the whole frame, to be filled during
 *               mem allocation
 *    @mem_info : user specific pointer to additional mem info
+*    @flags:  v4l2_buffer flags, used to report error in data buffers
 **/
 typedef struct mm_camera_buf_def {
     uint32_t stream_id;
@@ -133,6 +137,7 @@ typedef struct mm_camera_buf_def {
     void *buffer;
     size_t frame_len;
     void *mem_info;
+    uint32_t flags;
 } mm_camera_buf_def_t;
 
 /** mm_camera_super_buf_t: super buf structure for bundled
@@ -177,16 +182,7 @@ typedef struct {
     uint8_t primary_only;
 } mm_camera_req_buf_t;
 
-/** mm_camera_event_t: structure for event
-*    @server_event_type : event type from serer
-*    @status : status of an event, value could be
-*              CAM_STATUS_SUCCESS
-*              CAM_STATUS_FAILED
-**/
-typedef struct {
-    cam_event_type_t server_event_type;
-    uint32_t status;
-} mm_camera_event_t;
+typedef cam_event_t mm_camera_event_t;
 
 /** mm_camera_event_notify_t: function definition for event
 *   notify handling
@@ -214,12 +210,14 @@ typedef void (*mm_camera_buf_notify_t) (mm_camera_super_buf_t *bufs,
 *                   the index to plane (0..num_of_planes)
 *    @fd : file descriptor of the stream buffer
 *    @size: size of the stream buffer
+*    @buffer: Pointer to buffer to register
 *    @userdata : user data pointer
 **/
 typedef int32_t (*map_stream_buf_op_t) (uint32_t frame_idx,
                                         int32_t plane_idx,
                                         int fd,
                                         size_t size,
+                                        void *buffer,
                                         cam_mapping_buf_type type,
                                         void *userdata);
 
@@ -373,10 +371,8 @@ typedef enum {
 *                     queue
 *    @enable_frame_sync: Enables frame sync for dual camera
 *    @priority : save matched priority frames only
-*    @instant_capture_enabled : flag to indicate whether
-*                     instant capture enabled or not.
-*    @aec_frame_bound : Number of frames, camera interface will wait for
-*                     getting the instant capture frame.
+*    @user_expected_frame_id : Number of frames, camera interface
+*                     will wait for getting the instant capture frame.
 **/
 typedef struct {
     mm_camera_super_buf_notify_mode_t notify_mode;
@@ -386,8 +382,7 @@ typedef struct {
     uint8_t max_unmatched_frames;
     uint8_t enable_frame_sync;
     mm_camera_super_buf_priority_t priority;
-    uint8_t instant_capture_enabled;
-    uint8_t aec_frame_bound;
+    uint8_t user_expected_frame_id;
 } mm_camera_channel_attr_t;
 
 typedef struct {
@@ -419,16 +414,6 @@ typedef struct {
      **/
     int32_t (*close_camera) (uint32_t camera_handle);
 
-
-    /** error_close_camera: function definition for closing
-     *                      the camera backend on an unrecoverable
-     *                      error
-     *    @camera_handle : camera handler
-     *  Return value: 0 -- success
-     *                -1 -- failure
-     **/
-    int32_t (*error_close_camera) (uint32_t camera_handle);
-
     /** map_buf: fucntion definition for mapping a camera buffer
      *           via domain socket
      *    @camera_handle : camer handler
@@ -444,7 +429,8 @@ typedef struct {
     int32_t (*map_buf) (uint32_t camera_handle,
                         uint8_t buf_type,
                         int fd,
-                        size_t size);
+                        size_t size,
+                        void *buffer);
 
     /** map_bufs: function definition for mapping multiple camera buffers
      *           via domain socket
@@ -650,7 +636,8 @@ typedef struct {
                                uint32_t buf_idx,
                                int32_t plane_idx,
                                int fd,
-                               size_t size);
+                               size_t size,
+                               void *buffer);
 
     /** map_stream_bufs: function definition for mapping multiple
      *                 stream buffers via domain socket
@@ -752,6 +739,24 @@ typedef struct {
     int32_t (*qbuf) (uint32_t camera_handle,
                      uint32_t ch_id,
                      mm_camera_buf_def_t *buf);
+
+    /** cancel_buffer: fucntion definition for recalling a frame
+     *        buffer from the kernel this is most likely when h/w
+     *        failed to use this buffer and dropped the frame we use
+     *        this API to recall the buffer and return it to the
+     *        framework
+     *    @camera_handle : camer handler
+     *    @ch_id : channel handler
+     *    @stream_id : stream handle
+     *    @buf : a frame buffer to be queued back to kernel
+     *  Return value: 0 -- success
+     *                -1 -- failure
+     **/
+    int32_t (*cancel_buffer) (uint32_t camera_handle,
+                     uint32_t ch_id,
+                     uint32_t stream_id,
+                     uint32_t buf_idx);
+
 
     /** get_queued_buf_count: fucntion definition for querying queued buf count
      *    @camera_handle : camer handler
@@ -891,8 +896,9 @@ int32_t mm_stream_calc_offset_preview(cam_stream_info_t *stream_info,
         cam_padding_info_t *padding,
         cam_stream_buf_plane_info_t *buf_planes);
 
-int32_t mm_stream_calc_offset_post_view(cam_format_t fmt,
+int32_t mm_stream_calc_offset_post_view(cam_stream_info_t *stream_info,
         cam_dimension_t *dim,
+        cam_padding_info_t *padding,
         cam_stream_buf_plane_info_t *buf_planes);
 
 int32_t mm_stream_calc_offset_snapshot(cam_format_t fmt,
@@ -928,5 +934,4 @@ struct camera_info *get_cam_info(uint32_t camera_id, cam_sync_type_t *pCamType);
 
 uint8_t is_yuv_sensor(uint32_t camera_id);
 
-nsecs_t getBootToMonoTimeOffset();
 #endif /*__MM_CAMERA_INTERFACE_H__*/

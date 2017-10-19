@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundataion. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -28,18 +28,20 @@
  */
 #define LOG_TAG "QCameraHWI_Mem"
 
-#include <string.h>
+// System dependencies
 #include <fcntl.h>
-#include <sys/mman.h>
+#include <stdio.h>
 #include <utils/Errors.h>
-#include <utils/Log.h>
-#include <gralloc_priv.h>
-#include <QComOMXMetadata.h>
-#include <OMX_IVCommon.h>
+#define MMAN_H <SYSTEM_HEADER_PREFIX/mman.h>
+#include MMAN_H
+#include "gralloc.h"
+#include "gralloc_priv.h"
 
+// Camera dependencies
 #include "QCamera2HWI.h"
 #include "QCameraMem.h"
 #include "QCameraParameters.h"
+#include "QCameraTrace.h"
 
 // Media dependencies
 #ifdef USE_MEDIA_EXTENSIONS
@@ -51,7 +53,8 @@ typedef struct encoder_media_buffer_type media_metadata_buffer;
 #endif
 
 extern "C" {
-#include <mm_camera_interface.h>
+#include "mm_camera_dbg.h"
+#include "mm_camera_interface.h"
 }
 
 using namespace android;
@@ -72,7 +75,7 @@ namespace qcamera {
  *==========================================================================*/
 QCameraMemory::QCameraMemory(bool cached,
         QCameraMemoryPool *pool,
-        cam_stream_type_t streamType, cam_stream_buf_type bufType)
+        cam_stream_type_t streamType, QCameraMemType bufType)
     :m_bCached(cached),
      mMemoryPool(pool),
      mStreamType(streamType),
@@ -113,7 +116,7 @@ int QCameraMemory::cacheOpsInternal(uint32_t index, unsigned int cmd, void *vadd
 {
     if (!m_bCached) {
         // Memory is not cached, no need for cache ops
-        CDBG("%s: No cache ops here for uncached memory", __func__);
+        LOGD("No cache ops here for uncached memory");
         return OK;
     }
 
@@ -122,7 +125,7 @@ int QCameraMemory::cacheOpsInternal(uint32_t index, unsigned int cmd, void *vadd
     int ret = OK;
 
     if (index >= mBufferCount) {
-        ALOGE("%s: index %d out of bound [0, %d)", __func__, index, mBufferCount);
+        LOGE("index %d out of bound [0, %d)", index, mBufferCount);
         return BAD_INDEX;
     }
 
@@ -137,13 +140,14 @@ int QCameraMemory::cacheOpsInternal(uint32_t index, unsigned int cmd, void *vadd
     custom_data.cmd = cmd;
     custom_data.arg = (unsigned long)&cache_inv_data;
 
-    CDBG_HIGH("%s: addr = %p, fd = %d, handle = %lx length = %d, ION Fd = %d",
-         __func__, cache_inv_data.vaddr, cache_inv_data.fd,
+    LOGH("addr = %p, fd = %d, handle = %lx length = %d, ION Fd = %d",
+          cache_inv_data.vaddr, cache_inv_data.fd,
          (unsigned long)cache_inv_data.handle, cache_inv_data.length,
          mMemInfo[index].main_ion_fd);
     ret = ioctl(mMemInfo[index].main_ion_fd, ION_IOC_CUSTOM, &custom_data);
-    if (ret < 0)
-        ALOGE("%s: Cache Invalidate failed: %s\n", __func__, strerror(errno));
+    if (ret < 0) {
+        LOGE("Cache Invalidate failed: %s\n", strerror(errno));
+    }
 
     return ret;
 }
@@ -237,6 +241,21 @@ uint8_t QCameraMemory::getMappable() const
 }
 
 /*===========================================================================
+ * FUNCTION   : checkIfAllBuffersMapped
+ *
+ * DESCRIPTION: query if all buffers are mapped
+ *
+ * PARAMETERS : none
+ *
+ * RETURN     : 1 as buffer count is always equal to mappable count
+ *==========================================================================*/
+uint8_t QCameraMemory::checkIfAllBuffersMapped() const
+{
+    return 1;
+}
+
+
+/*===========================================================================
  * FUNCTION   : getBufDef
  *
  * DESCRIPTION: query detailed buffer information
@@ -252,7 +271,7 @@ void QCameraMemory::getBufDef(const cam_frame_len_offset_t &offset,
         mm_camera_buf_def_t &bufDef, uint32_t index) const
 {
     if (!mBufferCount) {
-        ALOGE("Memory not allocated");
+        LOGE("Memory not allocated");
         return;
     }
     bufDef.fd = mMemInfo[index].fd;
@@ -307,7 +326,7 @@ int32_t QCameraMemory::getUserBufDef(const cam_stream_user_buf_info_t &buf_info,
     uint32_t plane_idx = (index * buf_info.frame_buf_cnt);
 
     if (!mBufferCount) {
-        ALOGE("Memory not allocated");
+        LOGE("Memory not allocated");
         return INVALID_OPERATION;
     }
 
@@ -334,8 +353,8 @@ int32_t QCameraMemory::getUserBufDef(const cam_stream_user_buf_info_t &buf_info,
         }
         bufDef.user_buf.plane_buf = planeBufDef;
 
-        CDBG("%s: num_buf = %d index = %d plane_idx = %d",
-                __func__, bufDef.user_buf.num_buffers, index, plane_idx);
+        LOGD("num_buf = %d index = %d plane_idx = %d",
+                 bufDef.user_buf.num_buffers, index, plane_idx);
     }
     return NO_ERROR;
 }
@@ -364,19 +383,19 @@ int QCameraMemory::alloc(int count, size_t size, unsigned int heap_id,
     ATRACE_BEGIN_SNPRINTF("%s %zu %d", "Memsize", size, count);
 
     if (new_bufCnt > MM_CAMERA_MAX_NUM_FRAMES) {
-        ALOGE("%s: Buffer count %d out of bound. Max is %d",
-              __func__, new_bufCnt, MM_CAMERA_MAX_NUM_FRAMES);
+        LOGE("Buffer count %d out of bound. Max is %d",
+               new_bufCnt, MM_CAMERA_MAX_NUM_FRAMES);
         ATRACE_END();
         return BAD_INDEX;
     }
 
     for (int i = mBufferCount; i < new_bufCnt; i ++) {
         if ( NULL == mMemoryPool ) {
-            CDBG_HIGH("%s : No memory pool available, allocating now", __func__);
+            LOGH("No memory pool available, allocating now");
             rc = allocOneBuffer(mMemInfo[i], heap_id, size, m_bCached,
                      secure_mode);
             if (rc < 0) {
-                ALOGE("%s: AllocateIonMemory failed", __func__);
+                LOGE("AllocateIonMemory failed");
                 for (int j = i-1; j >= 0; j--)
                     deallocOneBuffer(mMemInfo[j]);
                 break;
@@ -389,7 +408,7 @@ int QCameraMemory::alloc(int count, size_t size, unsigned int heap_id,
                                              mStreamType,
                                              secure_mode);
             if (rc < 0) {
-                ALOGE("%s: Memory pool allocation failed", __func__);
+                LOGE("Memory pool allocation failed");
                 for (int j = i-1; j >= 0; j--)
                     mMemoryPool->releaseBuffer(mMemInfo[j],
                                                mStreamType);
@@ -448,7 +467,7 @@ int QCameraMemory::allocOneBuffer(QCameraMemInfo &memInfo,
 
     main_ion_fd = open("/dev/ion", O_RDONLY);
     if (main_ion_fd < 0) {
-        ALOGE("Ion dev open failed: %s\n", strerror(errno));
+        LOGE("Ion dev open failed: %s\n", strerror(errno));
         goto ION_OPEN_FAILED;
     }
 
@@ -462,7 +481,7 @@ int QCameraMemory::allocOneBuffer(QCameraMemInfo &memInfo,
     }
     alloc.heap_id_mask = heap_id;
     if (secure_mode == SECURE) {
-        ALOGD("%s: Allocate secure buffer\n", __func__);
+        LOGD("Allocate secure buffer\n");
         alloc.flags = ION_SECURE;
         alloc.heap_id_mask = ION_HEAP(ION_CP_MM_HEAP_ID);
         alloc.align = 1048576; // 1 MiB alignment to be able to protect later
@@ -471,7 +490,7 @@ int QCameraMemory::allocOneBuffer(QCameraMemInfo &memInfo,
 
     rc = ioctl(main_ion_fd, ION_IOC_ALLOC, &alloc);
     if (rc < 0) {
-        ALOGE("ION allocation failed: %s\n", strerror(errno));
+        LOGE("ION allocation failed: %s\n", strerror(errno));
         goto ION_ALLOC_FAILED;
     }
 
@@ -479,7 +498,7 @@ int QCameraMemory::allocOneBuffer(QCameraMemInfo &memInfo,
     ion_info_fd.handle = alloc.handle;
     rc = ioctl(main_ion_fd, ION_IOC_SHARE, &ion_info_fd);
     if (rc < 0) {
-        ALOGE("ION map failed %s\n", strerror(errno));
+        LOGE("ION map failed %s\n", strerror(errno));
         goto ION_MAP_FAILED;
     }
 
@@ -490,8 +509,8 @@ int QCameraMemory::allocOneBuffer(QCameraMemInfo &memInfo,
     memInfo.cached = cached;
     memInfo.heap_id = heap_id;
 
-    ALOGD("%s : ION buffer %lx with size %d allocated",
-            __func__, (unsigned long)memInfo.handle, alloc.len);
+    LOGD("ION buffer %lx with size %d allocated",
+             (unsigned long)memInfo.handle, alloc.len);
     return OK;
 
 ION_MAP_FAILED:
@@ -633,7 +652,7 @@ int QCameraMemoryPool::findBufferLocked(
         size_t size, bool cached, cam_stream_type_t streamType)
 {
     int rc = NAME_NOT_FOUND;
-
+    size_t alignsize = (size + 4095U) & (~4095U);
     if (mPools[streamType].empty()) {
         return NAME_NOT_FOUND;
     }
@@ -641,12 +660,12 @@ int QCameraMemoryPool::findBufferLocked(
     List<struct QCameraMemory::QCameraMemInfo>::iterator it = mPools[streamType].begin();
     if (streamType == CAM_STREAM_TYPE_OFFLINE_PROC) {
         for( ; it != mPools[streamType].end() ; it++) {
-            if( ((*it).size == size) &&
+            if( ((*it).size == alignsize) &&
                     ((*it).heap_id == heap_id) &&
                     ((*it).cached == cached) ) {
                 memInfo = *it;
-                ALOGE("%s : Found buffer %lx size %d",
-                        __func__, (unsigned long)memInfo.handle, memInfo.size);
+                LOGD("Found buffer %lx size %d",
+                         (unsigned long)memInfo.handle, memInfo.size);
                 mPools[streamType].erase(it);
                 rc = NO_ERROR;
                 break;
@@ -658,8 +677,8 @@ int QCameraMemoryPool::findBufferLocked(
                     ((*it).heap_id == heap_id) &&
                     ((*it).cached == cached) ) {
                 memInfo = *it;
-                ALOGE("%s : Found buffer %lx size %d",
-                        __func__, (unsigned long)memInfo.handle, memInfo.size);
+                LOGD("Found buffer %lx size %d",
+                         (unsigned long)memInfo.handle, memInfo.size);
                 mPools[streamType].erase(it);
                 rc = NO_ERROR;
                 break;
@@ -698,7 +717,7 @@ int QCameraMemoryPool::allocateBuffer(
 
     rc = findBufferLocked(memInfo, heap_id, size, cached, streamType);
     if (NAME_NOT_FOUND == rc ) {
-        CDBG_HIGH("%s : Buffer not found!", __func__);
+        LOGD("Buffer not found!");
         rc = QCameraMemory::allocOneBuffer(memInfo, heap_id, size, cached,
                  secure_mode);
     }
@@ -751,7 +770,7 @@ QCameraHeapMemory::~QCameraHeapMemory()
 void *QCameraHeapMemory::getPtr(uint32_t index) const
 {
     if (index >= mBufferCount) {
-        ALOGE("index out of bound");
+        LOGE("index out of bound");
         return (void *)BAD_INDEX;
     }
     return mPtr[index];
@@ -798,6 +817,10 @@ int QCameraHeapMemory::allocate(uint8_t count, size_t size, uint32_t isSecure)
                 for (int j = i-1; j >= 0; j --) {
                     munmap(mPtr[j], mMemInfo[j].size);
                     mPtr[j] = NULL;
+                    deallocOneBuffer(mMemInfo[j]);
+                }
+                // Deallocate remaining buffers that have already been allocated
+                for (int j = i; j < count; j++) {
                     deallocOneBuffer(mMemInfo[j]);
                 }
                 ATRACE_END();
@@ -988,7 +1011,7 @@ QCameraMetadataStreamMemory::QCameraMetadataStreamMemory(bool cached)
 QCameraMetadataStreamMemory::~QCameraMetadataStreamMemory()
 {
     if (mBufferCount > 0) {
-        CDBG_HIGH("%s, buf_cnt > 0, deallocate buffers now.\n", __func__);
+        LOGH("%s, buf_cnt > 0, deallocate buffers now.\n", __func__);
         deallocate();
     }
 }
@@ -1026,13 +1049,13 @@ int QCameraMetadataStreamMemory::getRegFlags(uint8_t *regFlags) const
  * RETURN     : none
  *==========================================================================*/
 QCameraStreamMemory::QCameraStreamMemory(camera_request_memory memory,
-        void *user,
+        void* cbCookie,
         bool cached,
         QCameraMemoryPool *pool,
-        cam_stream_type_t streamType, cam_stream_buf_type bufType)
+        cam_stream_type_t streamType, __unused cam_stream_buf_type bufType)
     :QCameraMemory(cached, pool, streamType),
      mGetMemory(memory),
-     mCallbackCookie(user)
+     mCallbackCookie(cbCookie)
 {
     for (int i = 0; i < MM_CAMERA_MAX_NUM_FRAMES; i ++)
         mCameraMemory[i] = NULL;
@@ -1237,7 +1260,7 @@ int QCameraStreamMemory::getMatchBufIndex(const void *opaque,
 void *QCameraStreamMemory::getPtr(uint32_t index) const
 {
     if (index >= mBufferCount) {
-        ALOGE("index out of bound");
+        LOGE("index out of bound");
         return (void *)BAD_INDEX;
     }
     if (mCameraMemory[index] == 0) {
@@ -1258,18 +1281,19 @@ void *QCameraStreamMemory::getPtr(uint32_t index) const
  *
  * RETURN     : none
  *==========================================================================*/
-QCameraVideoMemory::QCameraVideoMemory(camera_request_memory memory,
-                                       void *user, bool cached, cam_stream_buf_type bufType)
-    : QCameraStreamMemory(memory, user, cached)
+QCameraVideoMemory::QCameraVideoMemory(camera_request_memory memory, void* cbCookie,
+                                       bool cached, QCameraMemType bufType)
+    : QCameraStreamMemory(memory, cbCookie, cached)
 {
     memset(mMetadata, 0, sizeof(mMetadata));
-#ifdef USE_MEDIA_EXTENSIONS
     memset(mNativeHandle, 0, sizeof(mNativeHandle));
-#endif
     mMetaBufCount = 0;
     mBufType = bufType;
     //Set Default color conversion format
     mUsage = private_handle_t::PRIV_FLAGS_ITU_R_601_FR;
+
+    //Set Default frame format
+    mFormat = OMX_COLOR_FormatYUV420SemiPlanar;
 }
 
 /*===========================================================================
@@ -1307,37 +1331,27 @@ int QCameraVideoMemory::allocate(uint8_t count, size_t size, uint32_t isSecure)
         return rc;
     }
 
-    int usage = mUsage | private_handle_t::PRIV_FLAGS_ITU_R_601_FR;
-
-    if (mBufType != CAM_STREAM_BUF_TYPE_USERPTR) {
-        rc = allocateMeta(count);
+    if (!(mBufType & QCAMERA_MEM_TYPE_BATCH)) {
+        /*
+        *    FDs = 1
+        *    numInts  = 5 //offset, size, usage, timestamp, format + 1 for buffer index
+        */
+        rc = allocateMeta(count, 1, VIDEO_METADATA_NUM_INTS);
         if (rc != NO_ERROR) {
             ATRACE_END();
             return rc;
         }
         for (int i = 0; i < count; i ++) {
-            native_handle_t *nh = NULL;
-#ifdef USE_MEDIA_EXTENSIONS
-            nh =  mNativeHandle[i];
-#else
-            struct encoder_media_buffer_type * packet =
-                    (struct encoder_media_buffer_type *)mMetadata[i]->data;
-            /*data[0] => FD data[1] => OFFSET data[2] => SIZE data[3] => USAGE
-            data[4] => TIMESTAMP data[5] => FORMAT*/
-            packet->meta_handle = native_handle_create(1, VIDEO_METADATA_NUM_INTS+
-                                                      VIDEO_METADATA_NUM_COMMON_INTS);
-            packet->buffer_type = kMetadataBufferTypeCameraSource;
-            nh = const_cast<native_handle_t *>(packet->meta_handle);
-#endif
+            native_handle_t *nh =  mNativeHandle[i];
             if (!nh) {
-                ALOGE("%s: Error in getting video native handle", __func__);
+                LOGE("Error in getting video native handle");
                 ATRACE_END();
                 return NO_MEMORY;
             }
             nh->data[0] = mMemInfo[i].fd;
             nh->data[1] = 0;
             nh->data[2] = (int)mMemInfo[i].size;
-            nh->data[3] = usage;
+            nh->data[3] = mUsage;
             nh->data[4] = 0; //dummy value for timestamp in non-batch mode
             nh->data[5] = mFormat;
         }
@@ -1369,14 +1383,12 @@ int QCameraVideoMemory::allocateMore(uint8_t count, size_t size)
         return rc;
     }
 
-    int usage = mUsage | private_handle_t::PRIV_FLAGS_ITU_R_601_FR;
-
-    if (mBufType != CAM_STREAM_BUF_TYPE_USERPTR) {
+    if (!(mBufType & QCAMERA_MEM_TYPE_BATCH)) {
         for (int i = mBufferCount; i < count + mBufferCount; i ++) {
             mMetadata[i] = mGetMemory(-1,
                     sizeof(media_metadata_buffer), 1, mCallbackCookie);
             if (!mMetadata[i]) {
-                ALOGE("allocation of video metadata failed.");
+                LOGE("allocation of video metadata failed.");
                 for (int j = mBufferCount; j <= i-1; j ++) {
                     mMetadata[j]->release(mMetadata[j]);
                     mCameraMemory[j]->release(mCameraMemory[j]);
@@ -1387,32 +1399,31 @@ int QCameraVideoMemory::allocateMore(uint8_t count, size_t size)
                 return NO_MEMORY;
             }
             media_metadata_buffer * packet =
-                    (media_metadata_buffer*)mMetadata[i]->data;
-            native_handle_t * nh = NULL;
+                    (media_metadata_buffer *)mMetadata[i]->data;
+            //FDs = 1
+            //numInts  = 5 (offset, size, usage, timestamp, format)
+            mNativeHandle[i] = native_handle_create(1,
+                    (VIDEO_METADATA_NUM_INTS + VIDEO_METADATA_NUM_COMMON_INTS));
 #ifdef USE_MEDIA_EXTENSIONS
-            mNativeHandle[i] = native_handle_create(1, VIDEO_METADATA_NUM_INTS+VIDEO_METADATA_NUM_COMMON_INTS);
             packet->eType = kMetadataBufferTypeNativeHandleSource;
             packet->pHandle = NULL;
-            nh = mNativeHandle[i];
 #else
-            /*data[0] => FD data[1] => OFFSET data[2] => SIZE data[3] => USAGE
-            data[4] => TIMESTAMP data[5] => FORMAT*/
-            packet->meta_handle = native_handle_create(1, VIDEO_METADATA_NUM_INTS);
             packet->buffer_type = kMetadataBufferTypeCameraSource;
-            nh = const_cast<native_handle_t *>(packet->meta_handle);
+            packet->meta_handle = mNativeHandle[i];
 #endif
+            native_handle_t *nh =  mNativeHandle[i];
             if (!nh) {
-                ALOGE("%s: Error in getting video native handle", __func__);
+                LOGE("Error in getting video native handle");
                 ATRACE_END();
                 return NO_MEMORY;
             }
             nh->data[0] = mMemInfo[i].fd;
             nh->data[1] = 0;
             nh->data[2] = (int)mMemInfo[i].size;
-            nh->data[3] = usage;
+            nh->data[3] = mUsage;
             nh->data[4] = 0; //dummy value for timestamp in non-batch mode
             nh->data[5] = mFormat;
-            nh->data[6] = i;//buffer index
+            nh->data[6] = i;
         }
     }
     mBufferCount = (uint8_t)(mBufferCount + count);
@@ -1433,39 +1444,35 @@ int QCameraVideoMemory::allocateMore(uint8_t count, size_t size)
  *              NO_ERROR  -- success
  *              none-zero failure code
  *==========================================================================*/
-int QCameraVideoMemory::allocateMeta(uint8_t buf_cnt)
+int QCameraVideoMemory::allocateMeta(uint8_t buf_cnt, int numFDs, int numInts)
 {
     int rc = NO_ERROR;
-    //numOfInts(6): offset, size, usage, timestamp, format, buffer index
-    //totalInts = numOfInts*numFDs
-    int numFDs = 1;
-    int totalInts = 6;
+    int mTotalInts = 0;
 
     for (int i = 0; i < buf_cnt; i++) {
         mMetadata[i] = mGetMemory(-1,
                 sizeof(media_metadata_buffer), 1, mCallbackCookie);
         if (!mMetadata[i]) {
-            ALOGE("allocation of video metadata failed.");
+            LOGE("allocation of video metadata failed.");
             for (int j = (i - 1); j >= 0; j--) {
-#ifdef USE_MEDIA_EXTENSIONS
                 if (NULL != mNativeHandle[j]) {
-                    native_handle_delete(mNativeHandle[j]);
+                   native_handle_delete(mNativeHandle[j]);
                 }
-#endif
                 mMetadata[j]->release(mMetadata[j]);
             }
             return NO_MEMORY;
         }
-
-#ifdef USE_MEDIA_EXTENSIONS
-        media_metadata_buffer *packet = (media_metadata_buffer *)mMetadata[i]->data;
-        mNativeHandle[i] = native_handle_create(numFDs, totalInts+VIDEO_METADATA_NUM_COMMON_INTS);
+        media_metadata_buffer *packet =
+                (media_metadata_buffer *)mMetadata[i]->data;
+        mTotalInts = (numInts * numFDs);
+        mNativeHandle[i] = native_handle_create(numFDs,
+                (mTotalInts + VIDEO_METADATA_NUM_COMMON_INTS));
         if (mNativeHandle[i] == NULL) {
-            ALOGE("Error in getting video native handle");
+            LOGE("Error in getting video native handle");
             for (int j = (i - 1); j >= 0; j--) {
                 mMetadata[i]->release(mMetadata[i]);
                 if (NULL != mNativeHandle[j]) {
-                    native_handle_delete(mNativeHandle[j]);
+                   native_handle_delete(mNativeHandle[j]);
                 }
                 mMetadata[j]->release(mMetadata[j]);
             }
@@ -1473,8 +1480,9 @@ int QCameraVideoMemory::allocateMeta(uint8_t buf_cnt)
         } else {
             //assign buffer index to native handle.
             native_handle_t *nh =  mNativeHandle[i];
-            nh->data[numFDs + totalInts] = i;
+            nh->data[numFDs + mTotalInts] = i;
         }
+#ifdef USE_MEDIA_EXTENSIONS
         packet->eType = kMetadataBufferTypeNativeHandleSource;
         packet->pHandle = NULL;
 #else
@@ -1497,18 +1505,16 @@ int QCameraVideoMemory::allocateMeta(uint8_t buf_cnt)
  *==========================================================================*/
 void QCameraVideoMemory::deallocateMeta()
 {
-    for (int i = 0; i < mMetaBufCount; i ++) {
-#ifdef USE_MEDIA_EXTENSIONS
+    for (int i = 0; i < mMetaBufCount; i++) {
         native_handle_t *nh = mNativeHandle[i];
         if (NULL != nh) {
-            if (native_handle_delete(nh)) {
-                ALOGE("Unable to delete native handle");
-            }
+           if (native_handle_delete(nh)) {
+               LOGE("Unable to delete native handle");
+           }
         } else {
-            ALOGE("native handle not available");
+           LOGE("native handle not available");
         }
         mNativeHandle[i] = NULL;
-#endif
         mMetadata[i]->release(mMetadata[i]);
         mMetadata[i] = NULL;
     }
@@ -1549,12 +1555,12 @@ void QCameraVideoMemory::deallocate()
 camera_memory_t *QCameraVideoMemory::getMemory(uint32_t index,
         bool metadata) const
 {
+    int i;
     if (index >= mMetaBufCount || (!metadata && index >= mBufferCount))
         return NULL;
 
     if (metadata) {
 #ifdef USE_MEDIA_EXTENSIONS
-        int i;
         media_metadata_buffer *packet = NULL;
 
         for (i = 0; i < mMetaBufCount; i++) {
@@ -1567,7 +1573,7 @@ camera_memory_t *QCameraVideoMemory::getMemory(uint32_t index,
         if (i < mMetaBufCount) {
             return mMetadata[i];
         } else {
-            CDBG_HIGH("No free video meta memory");
+            LOGE("No free video meta memory");
             return NULL;
         }
 #else
@@ -1578,25 +1584,20 @@ camera_memory_t *QCameraVideoMemory::getMemory(uint32_t index,
     }
 }
 
-#ifdef USE_MEDIA_EXTENSIONS
-
 /*===========================================================================
-* FUNCTION   : getNativeHandle
-
-* DESCRIPTION: Updating native handle pointer
-*
-* PARAMETERS :
-*   @index   : buffer index
-*   @metadata: flag if it's metadata
-*
-* RETURN     : camera native handle ptr
-*              NULL if not supported or failed
-*==========================================================================*/
+ * FUNCTION   : getNativeHandle
+ *
+ * DESCRIPTION: getNativeHandle from video buffer
+ *
+ * PARAMETERS :
+ *   @index   : buffer index
+ *
+ * RETURN     : native_handle_t  * type of handle
+ *==========================================================================*/
 native_handle_t *QCameraVideoMemory::getNativeHandle(uint32_t index, bool metadata)
 {
-    if (index >= mMetaBufCount || (!metadata && index >= mBufferCount)) {
+    if (index >= mMetaBufCount || !metadata)
         return NULL;
-    }
     return mNativeHandle[index];
 }
 
@@ -1625,7 +1626,7 @@ int QCameraVideoMemory::closeNativeHandle(const void *data)
         native_handle_close(packet->pHandle);
         native_handle_delete(packet->pHandle);
     } else {
-        ALOGE("Invalid Data. Could not release");
+        LOGE("Invalid Data. Could not release");
         return BAD_VALUE;
     }
 #endif
@@ -1633,48 +1634,49 @@ int QCameraVideoMemory::closeNativeHandle(const void *data)
 }
 
 /*===========================================================================
-* FUNCTION   : closeNativeHandle
-*
-* DESCRIPTION: close video native handle
-*
-* PARAMETERS :
-*   @opaque  : ptr to video frame to be returned
-*
-* RETURN     : int32_t type of status
-*              NO_ERROR  -- success
-*              none-zero failure code
-*==========================================================================*/
+ * FUNCTION   : closeNativeHandle
+ *
+ * DESCRIPTION: close video native handle and update cached ptrs
+ *
+ * PARAMETERS :
+ *   @data     : ptr to video frame to be returned
+ *   @metadata : Flag to update metadata mode
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
 int QCameraVideoMemory::closeNativeHandle(const void *data, bool metadata)
 {
     int32_t rc = NO_ERROR;
-    int32_t index = -1;
 
+#ifdef USE_MEDIA_EXTENSIONS
     if (metadata) {
-        const media_metadata_buffer *packet = (const media_metadata_buffer*)data;
-        if (packet != NULL && packet->eType ==
-            kMetadataBufferTypeNativeHandleSource &&
-            (packet->pHandle != NULL)) {
+        const media_metadata_buffer *packet =
+                    (const media_metadata_buffer *)data;
+        if ((packet != NULL) && (packet->eType ==
+                kMetadataBufferTypeNativeHandleSource)
+                && (packet->pHandle)) {
             native_handle_close(packet->pHandle);
             native_handle_delete(packet->pHandle);
             for (int i = 0; i < mMetaBufCount; i++) {
                 if(mMetadata[i]->data == data) {
                     media_metadata_buffer *mem =
-                    (media_metadata_buffer *)mMetadata[i]->data;
+                            (media_metadata_buffer *)mMetadata[i]->data;
                     mem->pHandle = NULL;
                     break;
                 }
             }
         } else {
-            ALOGE("Invalid Data. Could not release");
+            LOGE("Invalid Data. Could not release");
             return BAD_VALUE;
         }
     } else {
-        ALOGW("Warning: Not of type video meta buffer");
+        LOGW("Warning: Not of type video meta buffer");
     }
+#endif
     return rc;
 }
-
-#endif
 
 /*===========================================================================
  * FUNCTION   : getMatchBufIndex
@@ -1696,14 +1698,14 @@ int QCameraVideoMemory::getMatchBufIndex(const void *opaque,
     if (metadata) {
 #ifdef USE_MEDIA_EXTENSIONS
         const media_metadata_buffer *packet =
-            (const media_metadata_buffer *)opaque;
+                (const media_metadata_buffer *)opaque;
         native_handle_t *nh = NULL;
         if ((packet != NULL) && (packet->eType ==
                 kMetadataBufferTypeNativeHandleSource)
                 && (packet->pHandle)) {
             nh = (native_handle_t *)packet->pHandle;
             int mCommonIdx = (nh->numInts + nh->numFds -
-                                VIDEO_METADATA_NUM_COMMON_INTS);
+                    VIDEO_METADATA_NUM_COMMON_INTS);
             for (int i = 0; i < mMetaBufCount; i++) {
                 if(nh->data[mCommonIdx] == mNativeHandle[i]->data[mCommonIdx]) {
                     index = i;
@@ -1713,7 +1715,7 @@ int QCameraVideoMemory::getMatchBufIndex(const void *opaque,
         }
 #else
         for (int i = 0; i < mMetaBufCount; i++) {
-            if (mMetadata[i]->data == opaque) {
+            if(mMetadata[i]->data == opaque) {
                 index = i;
                 break;
             }
@@ -1742,7 +1744,7 @@ int QCameraVideoMemory::getMatchBufIndex(const void *opaque,
  *==========================================================================*/
 void QCameraVideoMemory::setVideoInfo(int usage, cam_format_t format)
 {
-    mUsage = usage;
+    mUsage |= usage;
     mFormat = convCamtoOMXFormat(format);
 }
 
@@ -1754,13 +1756,10 @@ void QCameraVideoMemory::setVideoInfo(int usage, cam_format_t format)
  * PARAMETERS :
  *   @format : format in cam_format_t type
  *
- * RETURN     : none
+ * RETURN     : omx format
  *==========================================================================*/
 int QCameraVideoMemory::convCamtoOMXFormat(cam_format_t format)
 {
-    //OMX format is purely based on YUV pattern. For UBWC
-    //or any other format change, hint to be provided in the
-    //usage flags of native_handle_t.
     int omxFormat = OMX_COLOR_FormatYUV420SemiPlanar;
     switch (format) {
         case CAM_FORMAT_YUV_420_NV21:
@@ -1770,8 +1769,10 @@ int QCameraVideoMemory::convCamtoOMXFormat(cam_format_t format)
             break;
         case CAM_FORMAT_YUV_420_NV12:
         case CAM_FORMAT_YUV_420_NV12_VENUS:
-        case CAM_FORMAT_YUV_420_NV12_UBWC:
             omxFormat = OMX_COLOR_FormatYUV420SemiPlanar;
+            break;
+        case CAM_FORMAT_YUV_420_NV12_UBWC:
+            omxFormat = QOMX_COLOR_FORMATYUV420PackedSemiPlanar32mCompressed;
             break;
         default:
             omxFormat = OMX_COLOR_FormatYUV420SemiPlanar;
@@ -1790,20 +1791,22 @@ int QCameraVideoMemory::convCamtoOMXFormat(cam_format_t format)
  *
  * RETURN     : none
  *==========================================================================*/
-QCameraGrallocMemory::QCameraGrallocMemory(camera_request_memory memory, void *user)
+QCameraGrallocMemory::QCameraGrallocMemory(camera_request_memory memory, void* cbCookie)
         : QCameraMemory(true), mColorSpace(ITU_R_601_FR)
 {
     mMinUndequeuedBuffers = 0;
     mMappableBuffers = 0;
     mWindow = NULL;
     mWidth = mHeight = mStride = mScanline = mUsage = 0;
-    mDisplayFormat = HAL_PIXEL_FORMAT_YCrCb_420_SP;
+    mFormat = HAL_PIXEL_FORMAT_YCrCb_420_SP;
+    mCallbackCookie = cbCookie;
     mGetMemory = memory;
-    mCallbackCookie = user;
     for (int i = 0; i < MM_CAMERA_MAX_NUM_FRAMES; i ++) {
         mBufferHandle[i] = NULL;
         mLocalFlag[i] = BUFFER_NOT_OWNED;
         mPrivateHandle[i] = NULL;
+        mBufferStatus[i] = STATUS_IDLE;
+        mCameraMemory[i] = NULL;
     }
 }
 
@@ -1837,18 +1840,17 @@ QCameraGrallocMemory::~QCameraGrallocMemory()
  *
  * RETURN     : none
  *==========================================================================*/
-void QCameraGrallocMemory::setWindowInfo(preview_stream_ops_t *window, int width, int height,
-        int stride, int scanline, int format, int maxFPS, int usage, int backendFormat)
+void QCameraGrallocMemory::setWindowInfo(preview_stream_ops_t *window,
+        int width, int height, int stride, int scanline, int format, int maxFPS, int usage)
 {
     mWindow = window;
     mWidth = width;
     mHeight = height;
     mStride = stride;
     mScanline = scanline;
-    mDisplayFormat = format;
+    mFormat = format;
     mUsage = usage;
     setMaxFPS(maxFPS);
-    mCamFormat = backendFormat;
 }
 
 /*===========================================================================
@@ -1875,7 +1877,7 @@ void QCameraGrallocMemory::setMaxFPS(int maxFPS)
 
     /* the new fps will be updated in metadata of the next frame enqueued to display*/
     mMaxFPS = maxFPS;
-    CDBG_HIGH("%s: Setting max fps %d to display", __func__, mMaxFPS);
+    LOGH("Setting max fps %d to display", maxFPS);
 }
 
 /*===========================================================================
@@ -1896,15 +1898,15 @@ int QCameraGrallocMemory::displayBuffer(uint32_t index)
     int dequeuedIdx = BAD_INDEX;
 
     if (BUFFER_NOT_OWNED == mLocalFlag[index]) {
-        ALOGE("%s: buffer to be enqueued is not owned", __func__);
+        LOGE("buffer to be enqueued is not owned");
         return INVALID_OPERATION;
     }
 
     err = mWindow->enqueue_buffer(mWindow, (buffer_handle_t *)mBufferHandle[index]);
     if(err != 0) {
-        ALOGE("%s: enqueue_buffer failed, err = %d", __func__, err);
+        LOGE("enqueue_buffer failed, err = %d", err);
     } else {
-        CDBG("%s: enqueue_buffer hdl=%p", __func__, *mBufferHandle[index]);
+        LOGD("enqueue_buffer hdl=%p", *mBufferHandle[index]);
         mLocalFlag[index] = BUFFER_NOT_OWNED;
     }
 
@@ -1913,10 +1915,10 @@ int QCameraGrallocMemory::displayBuffer(uint32_t index)
     err = mWindow->dequeue_buffer(mWindow, &buffer_handle, &stride);
     if (err == NO_ERROR && buffer_handle != NULL) {
         int i;
-        CDBG("%s: dequed buf hdl =%p", __func__, *buffer_handle);
+        LOGD("dequed buf hdl =%p", *buffer_handle);
         for(i = 0; i < mMappableBuffers; i++) {
             if(mBufferHandle[i] == buffer_handle) {
-                CDBG("%s: Found buffer in idx:%d", __func__, i);
+                LOGD("Found buffer in idx:%d", i);
                 mLocalFlag[i] = BUFFER_OWNED;
                 dequeuedIdx = i;
                 break;
@@ -1925,7 +1927,7 @@ int QCameraGrallocMemory::displayBuffer(uint32_t index)
 
         if ((dequeuedIdx == BAD_INDEX) && (mMappableBuffers < mBufferCount)) {
             dequeuedIdx = mMappableBuffers;
-            CDBG("%s: Placing buffer in idx:%d", __func__, dequeuedIdx);
+            LOGD("Placing buffer in idx:%d", dequeuedIdx);
             mBufferHandle[dequeuedIdx] = buffer_handle;
             mLocalFlag[dequeuedIdx] = BUFFER_OWNED;
 
@@ -1933,7 +1935,7 @@ int QCameraGrallocMemory::displayBuffer(uint32_t index)
                     (struct private_handle_t *)(*mBufferHandle[dequeuedIdx]);
             mMemInfo[dequeuedIdx].main_ion_fd = open("/dev/ion", O_RDONLY);
             if (mMemInfo[dequeuedIdx].main_ion_fd < 0) {
-                ALOGE("%s: failed: could not open ion device", __func__);
+                LOGE("failed: could not open ion device");
                 return BAD_INDEX;
             }
 
@@ -1942,7 +1944,7 @@ int QCameraGrallocMemory::displayBuffer(uint32_t index)
             ion_info_fd.fd = mPrivateHandle[dequeuedIdx]->fd;
             if (ioctl(mMemInfo[dequeuedIdx].main_ion_fd,
                       ION_IOC_IMPORT, &ion_info_fd) < 0) {
-                ALOGE("%s: ION import failed\n", __func__);
+                LOGE("ION import failed\n");
                 return BAD_INDEX;
             }
 
@@ -1951,8 +1953,8 @@ int QCameraGrallocMemory::displayBuffer(uint32_t index)
                     (size_t)mPrivateHandle[dequeuedIdx]->size,
                     1,
                     mCallbackCookie);
-            CDBG_HIGH("%s: idx = %d, fd = %d, size = %d, offset = %d",
-                    __func__, dequeuedIdx, mPrivateHandle[dequeuedIdx]->fd,
+            LOGH("idx = %d, fd = %d, size = %d, offset = %d",
+                     dequeuedIdx, mPrivateHandle[dequeuedIdx]->fd,
                     mPrivateHandle[dequeuedIdx]->size,
                     mPrivateHandle[dequeuedIdx]->offset);
             mMemInfo[dequeuedIdx].fd = mPrivateHandle[dequeuedIdx]->fd;
@@ -1963,7 +1965,7 @@ int QCameraGrallocMemory::displayBuffer(uint32_t index)
             mMappableBuffers++;
         }
     } else {
-        CDBG_HIGH("%s: dequeue_buffer, no free buffer from display now", __func__);
+        LOGW("dequeue_buffer, no free buffer from display now");
     }
     return dequeuedIdx;
 }
@@ -1984,25 +1986,24 @@ int QCameraGrallocMemory::displayBuffer(uint32_t index)
 int32_t QCameraGrallocMemory::enqueueBuffer(uint32_t index, nsecs_t timeStamp)
 {
     int32_t err = NO_ERROR;
-    int32_t dequeuedIdx = BAD_INDEX;
 
     if (BUFFER_NOT_OWNED == mLocalFlag[index]) {
-        ALOGE("%s: buffer to be enqueued is not owned", __func__);
+        LOGE("buffer to be enqueued is not owned");
         return INVALID_OPERATION;
     }
 
     if (timeStamp != 0) {
         err = mWindow->set_timestamp(mWindow, timeStamp);
         if (err != NO_ERROR){
-            ALOGE("%s: Failed to native window timestamp", __func__);
+            LOGE("Failed to native window timestamp");
         }
     }
 
     err = mWindow->enqueue_buffer(mWindow, (buffer_handle_t *)mBufferHandle[index]);
     if(err != 0) {
-        ALOGE("%s: enqueue_buffer failed, err = %d", __func__, err);
+        LOGE("enqueue_buffer failed, err = %d", err);
     } else {
-        CDBG("%s: enqueue_buffer hdl=%p", __func__, *mBufferHandle[index]);
+        LOGD("enqueue_buffer hdl=%p", *mBufferHandle[index]);
         mLocalFlag[index] = BUFFER_NOT_OWNED;
     }
     return err;
@@ -2025,16 +2026,15 @@ int32_t QCameraGrallocMemory::dequeueBuffer()
     int32_t dequeuedIdx = BAD_INDEX;
     buffer_handle_t *buffer_handle = NULL;
     int32_t stride = 0;
-    uint8_t dequeueCnt = 1;
 
     dequeuedIdx = BAD_INDEX;
     err = mWindow->dequeue_buffer(mWindow, &buffer_handle, &stride);
     if ((err == NO_ERROR) && (buffer_handle != NULL)) {
         int i;
-        CDBG("%s: dequed buf hdl =%p", __func__, *buffer_handle);
+        LOGD("dequed buf hdl =%p", *buffer_handle);
         for(i = 0; i < mMappableBuffers; i++) {
             if(mBufferHandle[i] == buffer_handle) {
-                CDBG("%s: Found buffer in idx:%d", __func__, i);
+                LOGD("Found buffer in idx:%d", i);
                 mLocalFlag[i] = BUFFER_OWNED;
                 dequeuedIdx = i;
                 break;
@@ -2044,15 +2044,17 @@ int32_t QCameraGrallocMemory::dequeueBuffer()
         if ((dequeuedIdx == BAD_INDEX) &&
                 (mMappableBuffers < mBufferCount)) {
             dequeuedIdx = mMappableBuffers;
-            CDBG("%s: Placing buffer in idx:%d", __func__, dequeuedIdx);
+            LOGD("Placing buffer in idx:%d", dequeuedIdx);
             mBufferHandle[dequeuedIdx] = buffer_handle;
             mLocalFlag[dequeuedIdx] = BUFFER_OWNED;
 
             mPrivateHandle[dequeuedIdx] =
                     (struct private_handle_t *)(*mBufferHandle[dequeuedIdx]);
+            //update max fps info
+            setMetaData(mPrivateHandle[dequeuedIdx], UPDATE_REFRESH_RATE, (void*)&mMaxFPS);
             mMemInfo[dequeuedIdx].main_ion_fd = open("/dev/ion", O_RDONLY);
             if (mMemInfo[dequeuedIdx].main_ion_fd < 0) {
-                ALOGE("%s: failed: could not open ion device", __func__);
+                LOGE("failed: could not open ion device");
                 return BAD_INDEX;
             }
 
@@ -2061,17 +2063,19 @@ int32_t QCameraGrallocMemory::dequeueBuffer()
             ion_info_fd.fd = mPrivateHandle[dequeuedIdx]->fd;
             if (ioctl(mMemInfo[dequeuedIdx].main_ion_fd,
                     ION_IOC_IMPORT, &ion_info_fd) < 0) {
-                ALOGE("%s: ION import failed\n", __func__);
+                LOGE("ION import failed\n");
                 return BAD_INDEX;
             }
 
+            setMetaData(mPrivateHandle[dequeuedIdx], UPDATE_COLOR_SPACE,
+                    &mColorSpace);
             mCameraMemory[dequeuedIdx] =
                     mGetMemory(mPrivateHandle[dequeuedIdx]->fd,
                     (size_t)mPrivateHandle[dequeuedIdx]->size,
                     1,
                     mCallbackCookie);
-            CDBG_HIGH("%s: idx = %d, fd = %d, size = %d, offset = %d",
-                    __func__, dequeuedIdx, mPrivateHandle[dequeuedIdx]->fd,
+            LOGH("idx = %d, fd = %d, size = %d, offset = %d",
+                     dequeuedIdx, mPrivateHandle[dequeuedIdx]->fd,
                     mPrivateHandle[dequeuedIdx]->size,
                     mPrivateHandle[dequeuedIdx]->offset);
             mMemInfo[dequeuedIdx].fd = mPrivateHandle[dequeuedIdx]->fd;
@@ -2079,19 +2083,10 @@ int32_t QCameraGrallocMemory::dequeueBuffer()
                     (size_t)mPrivateHandle[dequeuedIdx]->size;
             mMemInfo[dequeuedIdx].handle = ion_info_fd.handle;
 
-            if (mCamFormat == CAM_FORMAT_Y_ONLY) {
-                // For mono sensor, assign the chroma pixel values to 128.
-                // Only Y data will be filled with valid data and UV pixels will be 128.
-                // 128 will be used for chroma to get the grayscale data.
-                void *cbcr_data = (void *)((uint8_t *)mCameraMemory[dequeuedIdx]->data
-                        + (mStride * mScanline));
-                size_t cbcr_len = mPrivateHandle[dequeuedIdx]->size - (mStride * mScanline);
-                memset(cbcr_data, 128, mPrivateHandle[dequeuedIdx]->size);
-            }
             mMappableBuffers++;
         }
     } else {
-        CDBG_HIGH("%s: dequeue_buffer, no free buffer from display now", __func__);
+        LOGW("dequeue_buffer, no free buffer from display now");
     }
 
     return dequeuedIdx;
@@ -2121,18 +2116,19 @@ int QCameraGrallocMemory::allocate(uint8_t count, size_t /*size*/,
     struct ion_fd_data ion_info_fd;
     memset(&ion_info_fd, 0, sizeof(ion_info_fd));
 
-    CDBG(" %s : E ", __func__);
+    LOGD("E ");
 
     if (!mWindow) {
-        ALOGE("Invalid native window");
+        LOGE("Invalid native window");
         ATRACE_END();
-        return INVALID_OPERATION;
+        ret = INVALID_OPERATION;
+        goto end;
     }
 
     // Increment buffer count by min undequeued buffer.
     err = mWindow->get_min_undequeued_buffer_count(mWindow,&mMinUndequeuedBuffers);
     if (err != 0) {
-        ALOGE("get_min_undequeued_buffer_count  failed: %s (%d)",
+        LOGE("get_min_undequeued_buffer_count  failed: %s (%d)",
                 strerror(-err), -err);
         ret = UNKNOWN_ERROR;
         goto end;
@@ -2140,24 +2136,16 @@ int QCameraGrallocMemory::allocate(uint8_t count, size_t /*size*/,
 
     err = mWindow->set_buffer_count(mWindow, count);
     if (err != 0) {
-         ALOGE("set_buffer_count failed: %s (%d)",
+         LOGE("set_buffer_count failed: %s (%d)",
                     strerror(-err), -err);
          ret = UNKNOWN_ERROR;
          goto end;
     }
 
-    err = mWindow->set_buffers_geometry(mWindow, mStride, mScanline, mDisplayFormat);
+    err = mWindow->set_buffers_geometry(mWindow, mWidth, mHeight, mFormat);
     if (err != 0) {
-         ALOGE("%s: set_buffers_geometry failed: %s (%d)",
-               __func__, strerror(-err), -err);
-         ret = UNKNOWN_ERROR;
-         goto end;
-    }
-
-    err = mWindow->set_crop(mWindow, 0, 0, mWidth, mHeight);
-    if (err != 0) {
-         ALOGE("%s: set_crop failed: %s (%d)",
-               __func__, strerror(-err), -err);
+         LOGE("set_buffers_geometry failed: %s (%d)",
+                strerror(-err), -err);
          ret = UNKNOWN_ERROR;
          goto end;
     }
@@ -2167,13 +2155,13 @@ int QCameraGrallocMemory::allocate(uint8_t count, size_t /*size*/,
     err = mWindow->set_usage(mWindow, gralloc_usage);
     if(err != 0) {
         /* set_usage error out */
-        ALOGE("%s: set_usage rc = %d", __func__, err);
+        LOGE("set_usage rc = %d", err);
         ret = UNKNOWN_ERROR;
         goto end;
     }
-    CDBG_HIGH("%s: usage = %d, geometry: %p, %d, %d, %d, %d, %d",
-          __func__, gralloc_usage, mWindow, mWidth, mHeight, mStride,
-          mScanline, mDisplayFormat);
+    LOGH("usage = %d, geometry: %p, %d, %d, %d, %d, %d",
+           gralloc_usage, mWindow, mWidth, mHeight, mStride,
+          mScanline, mFormat);
 
     mBufferCount = count;
     if ((count < mMappableBuffers) || (mMappableBuffers == 0)) {
@@ -2185,23 +2173,32 @@ int QCameraGrallocMemory::allocate(uint8_t count, size_t /*size*/,
         int stride;
         err = mWindow->dequeue_buffer(mWindow, &mBufferHandle[cnt], &stride);
         if(!err) {
-            CDBG("dequeue buf hdl =%p", mBufferHandle[cnt]);
+            LOGD("dequeue buf hdl =%p", mBufferHandle[cnt]);
             mLocalFlag[cnt] = BUFFER_OWNED;
         } else {
             mLocalFlag[cnt] = BUFFER_NOT_OWNED;
-            ALOGE("%s: dequeue_buffer idx = %d err = %d", __func__, cnt, err);
+            LOGE("dequeue_buffer idx = %d err = %d", cnt, err);
         }
 
-        CDBG("%s: dequeue buf: %p\n", __func__, mBufferHandle[cnt]);
+        LOGD("dequeue buf: %p\n", mBufferHandle[cnt]);
 
         if(err != 0) {
-            ALOGE("%s: dequeue_buffer failed: %s (%d)",
-                  __func__, strerror(-err), -err);
+            LOGE("dequeue_buffer failed: %s (%d)",
+                   strerror(-err), -err);
             ret = UNKNOWN_ERROR;
             for(int i = 0; i < cnt; i++) {
+                // Deallocate buffers when the native window is gone
+                struct ion_handle_data ion_handle;
+                memset(&ion_handle, 0, sizeof(ion_handle));
+                ion_handle.handle = mMemInfo[i].handle;
+                if (ioctl(mMemInfo[i].main_ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
+                    ALOGE("ion free failed");
+                }
+                close(mMemInfo[i].main_ion_fd);
+
                 if(mLocalFlag[i] != BUFFER_NOT_OWNED) {
                     err = mWindow->cancel_buffer(mWindow, mBufferHandle[i]);
-                    CDBG_HIGH("%s: cancel_buffer: hdl =%p", __func__, (*mBufferHandle[i]));
+                    LOGH("cancel_buffer: hdl =%p", (*mBufferHandle[i]));
                 }
                 mLocalFlag[i] = BUFFER_NOT_OWNED;
                 mBufferHandle[i] = NULL;
@@ -2216,18 +2213,18 @@ int QCameraGrallocMemory::allocate(uint8_t count, size_t /*size*/,
         setMetaData(mPrivateHandle[cnt], UPDATE_REFRESH_RATE, (void*)&mMaxFPS);
         mMemInfo[cnt].main_ion_fd = open("/dev/ion", O_RDONLY);
         if (mMemInfo[cnt].main_ion_fd < 0) {
-            ALOGE("%s: failed: could not open ion device", __func__);
+            LOGE("failed: could not open ion device");
             for(int i = 0; i < cnt; i++) {
                 struct ion_handle_data ion_handle;
                 memset(&ion_handle, 0, sizeof(ion_handle));
                 ion_handle.handle = mMemInfo[i].handle;
                 if (ioctl(mMemInfo[i].main_ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
-                    ALOGE("%s: ion free failed", __func__);
+                    LOGE("ion free failed");
                 }
                 close(mMemInfo[i].main_ion_fd);
                 if(mLocalFlag[i] != BUFFER_NOT_OWNED) {
                     err = mWindow->cancel_buffer(mWindow, mBufferHandle[i]);
-                    CDBG_HIGH("%s: cancel_buffer: hdl =%p", __func__, (*mBufferHandle[i]));
+                    LOGH("cancel_buffer: hdl =%p", (*mBufferHandle[i]));
                 }
                 mLocalFlag[i] = BUFFER_NOT_OWNED;
                 mBufferHandle[i] = NULL;
@@ -2239,19 +2236,19 @@ int QCameraGrallocMemory::allocate(uint8_t count, size_t /*size*/,
             ion_info_fd.fd = mPrivateHandle[cnt]->fd;
             if (ioctl(mMemInfo[cnt].main_ion_fd,
                       ION_IOC_IMPORT, &ion_info_fd) < 0) {
-                ALOGE("%s: ION import failed\n", __func__);
+                LOGE("ION import failed\n");
                 for(int i = 0; i < cnt; i++) {
                     struct ion_handle_data ion_handle;
                     memset(&ion_handle, 0, sizeof(ion_handle));
                     ion_handle.handle = mMemInfo[i].handle;
                     if (ioctl(mMemInfo[i].main_ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
-                        ALOGE("ion free failed");
+                        LOGE("ion free failed");
                     }
                     close(mMemInfo[i].main_ion_fd);
 
                     if(mLocalFlag[i] != BUFFER_NOT_OWNED) {
                         err = mWindow->cancel_buffer(mWindow, mBufferHandle[i]);
-                        CDBG_HIGH("%s: cancel_buffer: hdl =%p", __func__, (*mBufferHandle[i]));
+                        LOGH("cancel_buffer: hdl =%p", (*mBufferHandle[i]));
                     }
                     mLocalFlag[i] = BUFFER_NOT_OWNED;
                     mBufferHandle[i] = NULL;
@@ -2268,22 +2265,13 @@ int QCameraGrallocMemory::allocate(uint8_t count, size_t /*size*/,
                     (size_t)mPrivateHandle[cnt]->size,
                     1,
                     mCallbackCookie);
-        CDBG_HIGH("%s: idx = %d, fd = %d, size = %d, offset = %d",
-              __func__, cnt, mPrivateHandle[cnt]->fd,
+        LOGH("idx = %d, fd = %d, size = %d, offset = %d",
+               cnt, mPrivateHandle[cnt]->fd,
               mPrivateHandle[cnt]->size,
               mPrivateHandle[cnt]->offset);
         mMemInfo[cnt].fd = mPrivateHandle[cnt]->fd;
         mMemInfo[cnt].size = (size_t)mPrivateHandle[cnt]->size;
         mMemInfo[cnt].handle = ion_info_fd.handle;
-        if (mCamFormat == CAM_FORMAT_Y_ONLY) {
-            // For mono sensor, assign the chroma pixel values to 128.
-            // Only Y data will be filled with valid data and UV pixels will be 128.
-            // 128 will be used for chroma to get the grayscale data.
-            void *cbcr_data = (void *)((uint8_t *)mCameraMemory[cnt]->data
-                    + (mStride * mScanline));
-            size_t cbcr_len = mPrivateHandle[cnt]->size - (mStride * mScanline);
-            memset(cbcr_data, 128, cbcr_len);
-        }
     }
 
     //Cancel min_undequeued_buffer buffers back to the window
@@ -2293,7 +2281,10 @@ int QCameraGrallocMemory::allocate(uint8_t count, size_t /*size*/,
     }
 
 end:
-    CDBG(" %s : X ",__func__);
+    if (ret != NO_ERROR) {
+        mMappableBuffers = 0;
+    }
+    LOGD("X ");
     ATRACE_END();
     return ret;
 }
@@ -2314,7 +2305,7 @@ end:
  *==========================================================================*/
 int QCameraGrallocMemory::allocateMore(uint8_t /*count*/, size_t /*size*/)
 {
-    ALOGE("%s: Not implenmented yet", __func__);
+    LOGE("Not implenmented yet");
     return UNKNOWN_ERROR;
 }
 
@@ -2329,7 +2320,7 @@ int QCameraGrallocMemory::allocateMore(uint8_t /*count*/, size_t /*size*/)
  *==========================================================================*/
 void QCameraGrallocMemory::deallocate()
 {
-    CDBG("%s: E ", __FUNCTION__);
+    LOGD("E ", __FUNCTION__);
 
     for (int cnt = 0; cnt < mMappableBuffers; cnt++) {
         mCameraMemory[cnt]->release(mCameraMemory[cnt]);
@@ -2337,24 +2328,24 @@ void QCameraGrallocMemory::deallocate()
         memset(&ion_handle, 0, sizeof(ion_handle));
         ion_handle.handle = mMemInfo[cnt].handle;
         if (ioctl(mMemInfo[cnt].main_ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
-            ALOGE("ion free failed");
+            LOGE("ion free failed");
         }
         close(mMemInfo[cnt].main_ion_fd);
         if(mLocalFlag[cnt] != BUFFER_NOT_OWNED) {
             if (mWindow) {
                 mWindow->cancel_buffer(mWindow, mBufferHandle[cnt]);
-                CDBG_HIGH("cancel_buffer: hdl =%p", (*mBufferHandle[cnt]));
+                LOGH("cancel_buffer: hdl =%p", (*mBufferHandle[cnt]));
             } else {
-                ALOGE("Preview window is NULL, cannot cancel_buffer: hdl =%p",
+                LOGE("Preview window is NULL, cannot cancel_buffer: hdl =%p",
                       (*mBufferHandle[cnt]));
             }
         }
         mLocalFlag[cnt] = BUFFER_NOT_OWNED;
-        CDBG_HIGH("put buffer %d successfully", cnt);
+        LOGH("put buffer %d successfully", cnt);
     }
     mBufferCount = 0;
     mMappableBuffers = 0;
-    CDBG(" %s : X ",__FUNCTION__);
+    LOGD("X ",__FUNCTION__);
 }
 
 /*===========================================================================
@@ -2462,7 +2453,7 @@ int QCameraGrallocMemory::getMatchBufIndex(const void *opaque,
 void *QCameraGrallocMemory::getPtr(uint32_t index) const
 {
     if (index >= mMappableBuffers) {
-        ALOGE("index out of bound");
+        LOGE("index out of bound");
         return (void *)BAD_INDEX;
     }
     return mCameraMemory[index]->data;
@@ -2497,6 +2488,43 @@ void QCameraGrallocMemory::setMappable(uint8_t mappable)
 uint8_t QCameraGrallocMemory::getMappable() const
 {
     return mMappableBuffers;
+}
+
+/*===========================================================================
+ * FUNCTION   : checkIfAllBuffersMapped
+ *
+ * DESCRIPTION: check if all buffers for the are mapped
+ *
+ * PARAMETERS : none
+ *
+ * RETURN     : 1 if all buffers mapped
+ *              0 if total buffers not equal to mapped buffers
+ *==========================================================================*/
+uint8_t QCameraGrallocMemory::checkIfAllBuffersMapped() const
+{
+    LOGH("mBufferCount: %d, mMappableBuffers: %d",
+             mBufferCount, mMappableBuffers);
+    return (mBufferCount == mMappableBuffers);
+}
+
+/*===========================================================================
+ * FUNCTION   : setBufferStatus
+ *
+ * DESCRIPTION: set buffer status
+ *
+ * PARAMETERS :
+ *   @index   : index of the buffer
+ *   @status  : status of the buffer, whether skipped,etc
+ *
+ * RETURN     : none
+ *==========================================================================*/
+void QCameraGrallocMemory::setBufferStatus(uint32_t index, BufferStatus status)
+{
+    if (index >= mBufferCount) {
+        LOGE("index out of bound");
+        return;
+    }
+    mBufferStatus[index] = status;
 }
 
 }; //namespace qcamera
