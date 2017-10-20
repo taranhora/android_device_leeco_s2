@@ -152,10 +152,6 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
    Launcher3
 
-# Charger
-PRODUCT_PACKAGES += \
-    charger_res_images
-
 # CMActions
 PRODUCT_PACKAGES += \
     CMActions
@@ -283,10 +279,6 @@ PRODUCT_PACKAGES += \
 
 PRODUCT_BOOT_JARS += \
     telephony-ext
-
-# Recovery
-PRODUCT_PACKAGES += \
-    libminui
 
 # Sensors
 PRODUCT_COPY_FILES += \
