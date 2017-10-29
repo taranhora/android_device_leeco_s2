@@ -1,4 +1,5 @@
 /*
+**
 ** Copyright 2008, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,11 +14,11 @@
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
 */
-
 #ifndef ANDROID_HARDWARE_QCAMERA_PARAMETERS_H
 #define ANDROID_HARDWARE_QCAMERA_PARAMETERS_H
 
-// Camera dependencies
+//#include <utils/KeyedVector.h>
+//#include <utils/String8.h>
 #include <camera/CameraParameters.h>
 
 namespace android {

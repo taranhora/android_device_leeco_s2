@@ -19,7 +19,7 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES := media/libstagefright/foundation/MediaBuffer.cpp
+LOCAL_SRC_FILES := MediaBuffer.cpp
 
 LOCAL_SHARED_LIBRARIES := libstagefright_foundation libui libgui
 
@@ -35,8 +35,8 @@ include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
-    bionic/bionic_time_conversions.cpp \
-    bionic/pthread_cond.cpp
+    bionic_time_conversions.cpp \
+    pthread_cond.cpp
 
 LOCAL_SHARED_LIBRARIES := libc
 
@@ -48,12 +48,25 @@ LOCAL_32_BIT_ONLY := true
 include $(BUILD_SHARED_LIBRARY)
 
 
-# rild_socket
+# libshims_rild_socket
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := rild_socket.c
 
-LOCAL_MODULE := rild_socket
+LOCAL_MODULE := libshims_rild_socket
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_SHARED_LIBRARY)
+
+
+# libshims_is_wifi_driver_loaded
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES := is_wifi_driver_loaded.cpp
+
+LOCAL_SHARED_LIBRARIES := libwifi-hal
+
+LOCAL_MODULE := libshims_is_wifi_driver_loaded
 LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_SHARED_LIBRARY)

@@ -1,17 +1,17 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundataion. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
 * met:
 *     * Redistributions of source code must retain the above copyright
-*       notice, this list of conditions and the following disclaimer.
+*	notice, this list of conditions and the following disclaimer.
 *     * Redistributions in binary form must reproduce the above
-*       copyright notice, this list of conditions and the following
-*       disclaimer in the documentation and/or other materials provided
-*       with the distribution.
+*	copyright notice, this list of conditions and the following
+*	disclaimer in the documentation and/or other materials provided
+*	with the distribution.
 *     * Neither the name of The Linux Foundation nor the names of its
-*       contributors may be used to endorse or promote products derived
-*       from this software without specific prior written permission.
+*	contributors may be used to endorse or promote products derived
+*	from this software without specific prior written permission.
 *
 * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
 * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
@@ -29,11 +29,10 @@
 #ifndef __QCAMERA_HALHEADER_H__
 #define __QCAMERA_HALHEADER_H__
 
-// System dependencies
-#include "hardware/gralloc.h"
-
-// Camera dependencies
-#include "cam_types.h"
+extern "C" {
+#include <mm_camera_interface.h>
+#include <mm_jpeg_interface.h>
+}
 
 using namespace android;
 
@@ -42,23 +41,12 @@ namespace qcamera {
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-#define IS_USAGE_ZSL(usage)  (((usage) & (GRALLOC_USAGE_HW_CAMERA_ZSL)) \
-        == (GRALLOC_USAGE_HW_CAMERA_ZSL))
-
-class QCamera3ProcessingChannel;
+class QCamera3Channel;
 
     typedef enum {
         INVALID,
         VALID,
     } stream_status_t;
-
-    typedef enum {
-       REPROCESS_TYPE_NONE,
-       REPROCESS_TYPE_JPEG,
-       REPROCESS_TYPE_YUV,
-       REPROCESS_TYPE_PRIVATE,
-       REPROCESS_TYPE_RAW
-    } reprocess_type_t;
 
     typedef struct {
         uint32_t out_buf_index;
@@ -71,9 +59,6 @@ class QCamera3ProcessingChannel;
         uint8_t gps_coordinates_valid;
         double gps_coordinates[3];
         char gps_processing_method[GPS_PROCESSING_METHOD_SIZE];
-        uint8_t image_desc_valid;
-        char image_desc[EXIF_IMAGE_DESCRIPTION_SIZE];
-        bool hdr_snapshot;
     } jpeg_settings_t;
 
     typedef struct {
@@ -88,11 +73,8 @@ class QCamera3ProcessingChannel;
         cam_stream_buf_plane_info_t input_stream_plane_info;
         cam_dimension_t output_stream_dim;
         cam_padding_info_t *padding;
-        reprocess_type_t reprocess_type;
-        cam_hdr_param_t hdr_param;
-        QCamera3ProcessingChannel *src_channel;
+        QCamera3Channel *src_channel;
     } reprocess_config_t;
-
 };//namespace qcamera
 
 #endif

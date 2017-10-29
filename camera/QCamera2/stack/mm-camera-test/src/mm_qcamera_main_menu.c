@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -27,14 +27,17 @@
  *
  */
 
-// System dependencies
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <stdlib.h>
 #include <ctype.h>
-#include <errno.h>
+#include <inttypes.h>
 
-// Camera dependencies
 #include "mm_qcamera_main_menu.h"
 #include "mm_qcamera_app.h"
 #include "mm_qcamera_dbg.h"
+#include "mm_qcamera_socket.h"
 
 /*===========================================================================
  * Macro
@@ -83,14 +86,14 @@
 #define CAMERA_SHARPNESS_STEP 1
 
 const CAMERA_MAIN_MENU_TBL_T camera_main_menu_tbl[] = {
-  {START_PREVIEW,              "Start preview"},
+  {START_PREVIEW,               "Start preview"},
   {STOP_PREVIEW,               "Stop preview/video"},
   {SET_WHITE_BALANCE,          "Set white balance mode"},
   {SET_TINTLESS_ENABLE,        "Set Tintless Enable"},
   {SET_TINTLESS_DISABLE,       "Set Tintless Disable"},
   {SET_EXP_METERING,           "Set exposure metering mode"},
   {GET_CTRL_VALUE,             "Get control value menu"},
-  {TOGGLE_EZTUNE,              "Toggle EZtune. Default EZTune Off"},
+  {TOGGLE_AFR,                 "Toggle auto frame rate. Default fixed frame rate"},
   {SET_ISO,                    "ISO changes."},
   {BRIGHTNESS_GOTO_SUBMENU,    "Brightness changes."},
   {CONTRAST_GOTO_SUBMENU,      "Contrast changes."},
@@ -287,50 +290,50 @@ int next_menu(menu_id_change_t current_menu_id, char keypress, camera_action_t *
   * action_id_ptr = ACTION_NO_ACTION;
 
   output_to_event = keypress_to_event(keypress);
-  LOGD("current_menu_id=%d\n",current_menu_id);
+  CDBG("current_menu_id=%d\n",current_menu_id);
   printf("output_to_event=%d\n",output_to_event);
   switch(current_menu_id) {
     case MENU_ID_MAIN:
       switch(output_to_event) {
         case START_PREVIEW:
           * action_id_ptr = ACTION_START_PREVIEW;
-          LOGD("START_PREVIEW\n");
+          CDBG("START_PREVIEW\n");
           break;
         case STOP_PREVIEW:
           * action_id_ptr = ACTION_STOP_PREVIEW;
-          LOGD("STOP_PREVIEW\n");
+          CDBG("STOP_PREVIEW\n");
           break;
 
         case SET_WHITE_BALANCE:
           next_menu_id = MENU_ID_WHITEBALANCECHANGE;
-          LOGD("next_menu_id = MENU_ID_WHITEBALANCECHANGE = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_WHITEBALANCECHANGE = %d\n", next_menu_id);
           break;
 
         case SET_TINTLESS_ENABLE:
           * action_id_ptr = ACTION_SET_TINTLESS_ENABLE;
           next_menu_id = MENU_ID_MAIN;
-          LOGD("next_menu_id = MENU_ID_TINTLESSENABLE = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_TINTLESSENABLE = %d\n", next_menu_id);
           break;
 
         case SET_TINTLESS_DISABLE:
           * action_id_ptr = ACTION_SET_TINTLESS_DISABLE;
           next_menu_id = MENU_ID_MAIN;
-          LOGD("next_menu_id = MENU_ID_TINTLESSDISABLE = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_TINTLESSDISABLE = %d\n", next_menu_id);
           break;
 
         case SET_EXP_METERING:
           next_menu_id = MENU_ID_EXPMETERINGCHANGE;
-          LOGD("next_menu_id = MENU_ID_EXPMETERINGCHANGE = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_EXPMETERINGCHANGE = %d\n", next_menu_id);
           break;
 
         case GET_CTRL_VALUE:
           next_menu_id = MENU_ID_GET_CTRL_VALUE;
-          LOGD("next_menu_id = MENU_ID_GET_CTRL_VALUE = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_GET_CTRL_VALUE = %d\n", next_menu_id);
           break;
 
         case BRIGHTNESS_GOTO_SUBMENU:
           next_menu_id = MENU_ID_BRIGHTNESSCHANGE;
-          LOGD("next_menu_id = MENU_ID_BRIGHTNESSCHANGE = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_BRIGHTNESSCHANGE = %d\n", next_menu_id);
           break;
 
         case CONTRAST_GOTO_SUBMENU:
@@ -345,44 +348,44 @@ int next_menu(menu_id_change_t current_menu_id, char keypress, camera_action_t *
           next_menu_id = MENU_ID_SATURATIONCHANGE;
           break;
 
-        case TOGGLE_EZTUNE:
-          * action_id_ptr = ACTION_TOGGLE_EZTUNE;
-          LOGD("next_menu_id = MENU_ID_TOGGLE EZTUNE = %d\n", next_menu_id);
+        case TOGGLE_AFR:
+          * action_id_ptr = ACTION_TOGGLE_AFR;
+          CDBG("next_menu_id = MENU_ID_TOGGLEAFR = %d\n", next_menu_id);
           break;
 
         case SET_ISO:
           next_menu_id = MENU_ID_ISOCHANGE;
-          LOGD("next_menu_id = MENU_ID_ISOCHANGE = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_ISOCHANGE = %d\n", next_menu_id);
           break;
 
         case SET_ZOOM:
           next_menu_id = MENU_ID_ZOOMCHANGE;
-          LOGD("next_menu_id = MENU_ID_ZOOMCHANGE = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_ZOOMCHANGE = %d\n", next_menu_id);
           break;
 
         case BEST_SHOT:
           next_menu_id = MENU_ID_BESTSHOT;
-          LOGD("next_menu_id = MENU_ID_BESTSHOT = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_BESTSHOT = %d\n", next_menu_id);
           break;
 
         case LIVE_SHOT:
           * action_id_ptr = ACTION_TAKE_LIVE_SNAPSHOT;
-          LOGD("\nTaking Live snapshot\n");
+          CDBG("\nTaking Live snapshot\n");
           break;
 
         case FLASH_MODES:
           next_menu_id = MENU_ID_FLASHMODE;
-          LOGD("next_menu_id = MENU_ID_FLASHMODE = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_FLASHMODE = %d\n", next_menu_id);
           break;
 
         case SET_SHARPNESS:
           next_menu_id = MENU_ID_SHARPNESSCHANGE;
-          LOGD("next_menu_id = MENU_ID_SHARPNESSCHANGE = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_SHARPNESSCHANGE = %d\n", next_menu_id);
           break;
 
         case SWITCH_SNAP_RESOLUTION:
           next_menu_id = MENU_ID_SWITCH_RES;
-          LOGD("next_menu_id = MENU_ID_SWITCH_RES = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_SWITCH_RES = %d\n", next_menu_id);
           break;
 
         case TAKE_JPEG_SNAPSHOT:
@@ -392,33 +395,33 @@ int next_menu(menu_id_change_t current_menu_id, char keypress, camera_action_t *
 
         case START_RECORDING:
           * action_id_ptr = ACTION_START_RECORDING;
-          LOGD("Start recording\n");
+          CDBG("Start recording\n");
           break;
         case STOP_RECORDING:
           * action_id_ptr = ACTION_STOP_RECORDING;
-          LOGD("Stop recording\n");
+          CDBG("Stop recording\n");
           break;
         case TOGGLE_ZSL:
           * action_id_ptr = ACTION_TOGGLE_ZSL;
-          LOGD("Toggle ZSL\n");
+          CDBG("Toggle ZSL\n");
           break;
         case TAKE_RAW_SNAPSHOT:
             * action_id_ptr = ACTION_TAKE_RAW_SNAPSHOT;
             next_menu_id = MENU_ID_MAIN;
-            LOGD("Capture RAW\n");
+            CDBG("Capture RAW\n");
             break;
         case TOGGLE_WNR:
             * action_id_ptr = ACTION_TOGGLE_WNR;
             next_menu_id = MENU_ID_MAIN;
-            LOGD("Toggle WNR");
+            CDBG("Toggle WNR");
             break;
         case EXIT:
           * action_id_ptr = ACTION_EXIT;
-          LOGD("Exit \n");
+          CDBG("Exit \n");
           break;
         default:
           next_menu_id = MENU_ID_MAIN;
-          LOGD("next_menu_id = MENU_ID_MAIN = %d\n", next_menu_id);
+          CDBG("next_menu_id = MENU_ID_MAIN = %d\n", next_menu_id);
           break;
       }
       break;
@@ -615,7 +618,7 @@ int next_menu(menu_id_change_t current_menu_id, char keypress, camera_action_t *
       break;
 
     default:
-      LOGD("menu id is wrong: %d\n", current_menu_id);
+      CDBG("menu id is wrong: %d\n", current_menu_id);
       break;
   }
 
@@ -1104,10 +1107,10 @@ int decrease_saturation (mm_camera_lib_handle *lib_handle) {
 
 int take_jpeg_snapshot(mm_camera_test_obj_t *test_obj, int is_burst_mode)
 {
-  LOGH("\nEnter take_jpeg_snapshot!!\n");
+  CDBG_HIGH("\nEnter take_jpeg_snapshot!!\n");
   int rc = mm_app_take_picture (test_obj, (uint8_t)is_burst_mode);
   if (MM_CAMERA_OK != rc) {
-    LOGE(" mm_app_take_picture() err=%d\n",  rc);
+    CDBG_ERROR("%s: mm_app_take_picture() err=%d\n", __func__, rc);
   }
   return rc;
 }
@@ -1304,6 +1307,7 @@ int toggle_afr () {
 #endif
   return 0;
 }
+
 int set_zoom (mm_camera_lib_handle *lib_handle, int zoom_action_param) {
 
     if (zoom_action_param == ZOOM_IN) {
@@ -1315,7 +1319,7 @@ int set_zoom (mm_camera_lib_handle *lib_handle, int zoom_action_param) {
         if (zoom_level < ZOOM_MIN_VALUE)
             zoom_level = ZOOM_MIN_VALUE;
     } else {
-        LOGD(" Invalid zoom_action_param value\n");
+        CDBG("%s: Invalid zoom_action_param value\n", __func__);
         return -EINVAL;
     }
     return mm_camera_lib_send_command(lib_handle,
@@ -1422,7 +1426,7 @@ int set_flash_mode (mm_camera_lib_handle *lib_handle, int action_param) {
             break;
         case FLASH_MODE_TORCH:
             printf("\n FLASH_MODE_TORCH\n");
-            type = CAM_FLASH_MODE_TORCH;
+            type = CAM_ISO_MODE_100;
             break;
         default:
             break;
@@ -1579,7 +1583,7 @@ int filter_resolutions(mm_camera_lib_handle *lib_handle,
 
     rc = mm_camera_lib_get_caps(lib_handle, &camera_cap);
     if ( MM_CAMERA_OK != rc ) {
-        LOGE("mm_camera_lib_get_caps() err=%d\n",  rc);
+        CDBG_ERROR("%s:mm_camera_lib_get_caps() err=%d\n", __func__, rc);
         return -1;
     }
 
@@ -1624,7 +1628,7 @@ int enableAFR(mm_camera_lib_handle *lib_handle)
 
     rc = mm_camera_lib_get_caps(lib_handle, &cap);
     if ( MM_CAMERA_OK != rc ) {
-        LOGE("mm_camera_lib_get_caps() err=%d\n",  rc);
+        CDBG_ERROR("%s:mm_camera_lib_get_caps() err=%d\n", __func__, rc);
         return rc;
     }
 
@@ -1639,7 +1643,8 @@ int enableAFR(mm_camera_lib_handle *lib_handle)
                                     &cap.fps_ranges_tbl[j],
                                     NULL);
 
-    LOGE("FPS range [%5.2f:%5.2f] rc = %d",
+    CDBG_ERROR("%s : FPS range [%5.2f:%5.2f] rc = %d",
+              __func__,
               cap.fps_ranges_tbl[j].min_fps,
               cap.fps_ranges_tbl[j].max_fps,
               rc);
@@ -1661,7 +1666,6 @@ static int submain()
     int action_param;
     uint8_t previewing = 0;
     int isZSL = 0;
-    int isezTune = 0;
     uint8_t wnr_enabled = 0;
     mm_camera_lib_handle lib_handle;
     int num_cameras;
@@ -1681,13 +1685,13 @@ static int submain()
 
     rc = mm_camera_lib_open(&lib_handle, 0);
     if (rc != MM_CAMERA_OK) {
-        LOGE("mm_camera_lib_open() err=%d\n",  rc);
+        CDBG_ERROR("%s:mm_camera_lib_open() err=%d\n", __func__, rc);
         return -1;
     }
 
     num_cameras = mm_camera_lib_number_of_cameras(&lib_handle);
     if ( 0 >= num_cameras ) {
-        LOGE(" No camera sensors reported!");
+        CDBG_ERROR("%s: No camera sensors reported!", __func__);
         rc = -1;
         goto ERROR;
     } else if ( 1 <= num_cameras ) {
@@ -1701,7 +1705,7 @@ static int submain()
                                 dimension_tbl,
                                 (size_t)available_snap_sizes);
         if ( ( i < 0 ) || ( i >= available_snap_sizes ) ) {
-            LOGE("filter_resolutions()\n");
+            CDBG_ERROR("%s:filter_resolutions()\n", __func__);
             goto ERROR;
         }
         snap_dim.width = dimension_tbl[i].width;
@@ -1709,7 +1713,7 @@ static int submain()
 
         rc = enableAFR(&lib_handle);
         if (rc != MM_CAMERA_OK) {
-            LOGE("enableAFR() err=%d\n",  rc);
+            CDBG_ERROR("%s:enableAFR() err=%d\n", __func__, rc);
             goto ERROR;
         }
 
@@ -1718,10 +1722,13 @@ static int submain()
                                          &default_scene,
                                          NULL);
         if (rc != MM_CAMERA_OK) {
-            LOGE("mm_camera_lib_send_command() err=%d\n",  rc);
+            CDBG_ERROR("%s:mm_camera_lib_send_command() err=%d\n", __func__, rc);
             goto ERROR;
         }
     }
+    /*start the eztune server*/
+    CDBG_HIGH("Starting eztune Server \n");
+    eztune_server_start(&lib_handle);
 
     do {
         print_current_menu (current_menu_id);
@@ -1738,63 +1745,63 @@ static int submain()
 
         switch(action_id) {
             case ACTION_START_PREVIEW:
-                LOGE("ACTION_START_PREVIEW \n");
+                CDBG_ERROR("ACTION_START_PREVIEW \n");
                 rc = mm_camera_lib_start_stream(&lib_handle);
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_start_stream() err=%d\n",  rc);
+                    CDBG_ERROR("%s:mm_camera_lib_start_stream() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
                 previewing = 1;
                 break;
 
             case ACTION_STOP_PREVIEW:
-                LOGD("ACTION_STOP_PREVIEW \n");
+                CDBG("ACTION_STOP_PREVIEW \n");
                 rc = mm_camera_lib_stop_stream(&lib_handle);
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_stop_stream() err=%d\n",  rc);
+                    CDBG_ERROR("%s:mm_camera_lib_stop_stream() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
                 previewing = 0;
                 break;
 
             case ACTION_SET_WHITE_BALANCE:
-                LOGD("Selection for the White Balance changes\n");
+                CDBG("Selection for the White Balance changes\n");
                 set_whitebalance(&lib_handle, action_param);
                 break;
 
             case ACTION_SET_TINTLESS_ENABLE:
-                LOGD("Selection for the Tintless enable changes\n");
+                CDBG("Selection for the Tintless enable changes\n");
                 set_tintless = 1;
                 rc =  mm_camera_lib_send_command(&lib_handle,
                                                  MM_CAMERA_LIB_SET_TINTLESS,
                                                  &set_tintless,
                                                  NULL);
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_send_command() err=%d\n",  rc);
+                    CDBG_ERROR("%s:mm_camera_lib_send_command() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
                 break;
 
             case ACTION_SET_TINTLESS_DISABLE:
-                LOGD("Selection for the Tintless disable changes\n");
+                CDBG("Selection for the Tintless disable changes\n");
                 set_tintless = 0;
                 rc =  mm_camera_lib_send_command(&lib_handle,
                                                  MM_CAMERA_LIB_SET_TINTLESS,
                                                  &set_tintless,
                                                  NULL);
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_send_command() err=%d\n",  rc);
+                    CDBG_ERROR("%s:mm_camera_lib_send_command() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
                 break;
 
             case ACTION_SET_EXP_METERING:
-                LOGD("Selection for the Exposure Metering changes\n");
+                CDBG("Selection for the Exposure Metering changes\n");
                 set_exp_metering(&lib_handle, action_param);
                 break;
 
             case ACTION_GET_CTRL_VALUE:
-                LOGD("Selection for getting control value\n");
+                CDBG("Selection for getting control value\n");
                 get_ctrl_value(action_param);
                 break;
 
@@ -1809,82 +1816,62 @@ static int submain()
                 break;
 
             case ACTION_CONTRAST_INCREASE:
-                LOGD("Selection for the contrast increase\n");
+                CDBG("Selection for the contrast increase\n");
                 increase_contrast (&lib_handle);
                 break;
 
             case ACTION_CONTRAST_DECREASE:
-                LOGD("Selection for the contrast decrease\n");
+                CDBG("Selection for the contrast decrease\n");
                 decrease_contrast (&lib_handle);
                 break;
 
             case ACTION_EV_INCREASE:
-                LOGD("Selection for the EV increase\n");
+                CDBG("Selection for the EV increase\n");
                 increase_EV ();
                 break;
 
             case ACTION_EV_DECREASE:
-                LOGD("Selection for the EV decrease\n");
+                CDBG("Selection for the EV decrease\n");
                 decrease_EV ();
                 break;
 
             case ACTION_SATURATION_INCREASE:
-                LOGD("Selection for the EV increase\n");
+                CDBG("Selection for the EV increase\n");
                 increase_saturation (&lib_handle);
                 break;
 
             case ACTION_SATURATION_DECREASE:
-                LOGD("Selection for the EV decrease\n");
+                CDBG("Selection for the EV decrease\n");
                 decrease_saturation (&lib_handle);
                 break;
 
             case ACTION_TOGGLE_AFR:
-                LOGD("Select for auto frame rate toggling\n");
+                CDBG("Select for auto frame rate toggling\n");
                 toggle_afr();
                 break;
 
-            case ACTION_TOGGLE_EZTUNE:
-                LOGE("Select for EzTune");
-                printf("EZTUNE Toggle\n");
-                isezTune = !isezTune;
-                if (isezTune) {
-                    printf("EZ TUNE On !!!");
-                } else {
-                    printf("EZ TUNE Off !!!");
-                }
-
-                rc = mm_camera_lib_send_command(&lib_handle,
-                                      MM_CAMERA_LIB_EZTUNE_ENABLE,
-                                      &isezTune,
-                                      NULL);
-                if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_send_command() err=%d\n",  rc);
-                    goto ERROR;
-                }
-                break;
-
             case ACTION_SET_ISO:
-                LOGD("Select for ISO changes\n");
+                CDBG("Select for ISO changes\n");
                 set_iso(&lib_handle, action_param);
                 break;
 
             case ACTION_SET_ZOOM:
-                LOGD("Selection for the zoom direction changes\n");
+                CDBG("Selection for the zoom direction changes\n");
                 set_zoom(&lib_handle, action_param);
                 break;
 
             case ACTION_SHARPNESS_INCREASE:
-                LOGD("Selection for sharpness increase\n");
+                CDBG("Selection for sharpness increase\n");
                 increase_sharpness(&lib_handle);
                 break;
 
             case ACTION_SHARPNESS_DECREASE:
-                LOGD("Selection for sharpness decrease\n");
+                CDBG("Selection for sharpness decrease\n");
                 decrease_sharpness(&lib_handle);
                 break;
 
             case ACTION_SET_BESTSHOT_MODE:
-                LOGD("Selection for bestshot\n");
+                CDBG("Selection for bestshot\n");
                 set_bestshot_mode(&lib_handle, action_param);
                 break;
 
@@ -1896,13 +1883,13 @@ static int submain()
             case ACTION_SWITCH_CAMERA:
                 rc = mm_camera_lib_close(&lib_handle);
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_close() err=%d\n",  rc);
+                    CDBG_ERROR("%s:mm_camera_lib_close() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
 
                 rc = mm_camera_lib_open(&lib_handle, action_param);
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_open() err=%d\n",  rc);
+                    CDBG_ERROR("%s:mm_camera_lib_open() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
 
@@ -1910,7 +1897,7 @@ static int submain()
                                         dimension_tbl,
                                         sizeof(dimension_tbl)/sizeof(dimension_tbl[0]));
                 if ( ( i < 0 ) || ( i >=  available_snap_sizes ) ) {
-                    LOGE("filter_resolutions()\n");
+                    CDBG_ERROR("%s:filter_resolutions()\n", __func__);
                     goto ERROR;
                 }
                 snap_dim.width = dimension_tbl[i].width;
@@ -1918,7 +1905,7 @@ static int submain()
 
                 rc = enableAFR(&lib_handle);
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("enableAFR() err=%d\n",  rc);
+                    CDBG_ERROR("%s:enableAFR() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
 
@@ -1927,7 +1914,7 @@ static int submain()
                                                  &default_scene,
                                                  NULL);
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_send_command() err=%d\n",  rc);
+                    CDBG_ERROR("%s:mm_camera_lib_send_command() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
                 break;
@@ -1945,13 +1932,13 @@ static int submain()
                                                 &isZSL,
                                                 NULL);
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_send_command() err=%d\n",  rc);
+                    CDBG_ERROR("%s:mm_camera_lib_send_command() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
                 break;
 
             case ACTION_TAKE_RAW_SNAPSHOT:
-                LOGH("\n Take RAW snapshot\n");
+                CDBG_HIGH("\n Take RAW snapshot\n");
 
                 rc = mm_camera_lib_send_command(&lib_handle,
                                                 MM_CAMERA_LIB_DO_AF,
@@ -1959,7 +1946,7 @@ static int submain()
                                                 NULL);
 
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_send_command() err=%d\n",  rc);
+                    CDBG_ERROR("%s:mm_camera_lib_send_command() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
 
@@ -1968,20 +1955,20 @@ static int submain()
                                                 NULL,
                                                 NULL);
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_send_command() err=%d\n",  rc);
+                    CDBG_ERROR("%s:mm_camera_lib_send_command() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
                 break;
 
             case ACTION_TAKE_JPEG_SNAPSHOT:
-                LOGH("\n Take JPEG snapshot\n");
+                CDBG_HIGH("\n Take JPEG snapshot\n");
 
                 rc = mm_camera_lib_send_command(&lib_handle,
                                                 MM_CAMERA_LIB_JPEG_CAPTURE,
                                                 &snap_dim,
                                                 NULL);
                 if (rc != MM_CAMERA_OK) {
-                    LOGE("mm_camera_lib_send_command() err=%d\n",  rc);
+                    CDBG_ERROR("%s:mm_camera_lib_send_command() err=%d\n", __func__, rc);
                     goto ERROR;
                 }
                 break;
@@ -1993,20 +1980,24 @@ static int submain()
                 snap_dim.height = dimension_tbl[action_param].height;
                 break;
 
-           case ACTION_START_RECORDING:
-             LOGD("Start recording action\n");
-             mm_app_start_record_preview(&lib_handle.test_obj);
-             is_rec = 1;
-             break;
-
-           case ACTION_STOP_RECORDING:
-             LOGD("Stop recording action\n");
-             if(is_rec) {
-                 mm_app_stop_record_preview(&lib_handle.test_obj);
-                 is_rec = 0;
-             }
-
-             break;
+      case ACTION_START_RECORDING:
+        CDBG("Start recording action\n");
+#if 0
+        if (mm_app_start_video(cam_id) < 0)
+          goto ERROR;
+        is_rec = 1;
+#endif
+        break;
+      case ACTION_STOP_RECORDING:
+        CDBG("Stop recording action\n");
+#if 0
+        if(is_rec) {
+          if (mm_app_stop_video(cam_id) < 0)
+            goto ERROR;
+          is_rec = 0;
+        }
+#endif
+        break;
       case ACTION_TAKE_LIVE_SNAPSHOT:
         printf("Selection for live shot\n");
 #if 0
@@ -2025,7 +2016,7 @@ static int submain()
                                           &wnr_enabled,
                                           NULL);
           if (rc != MM_CAMERA_OK) {
-              LOGE("mm_camera_lib_send_command() err=%d\n",  rc);
+              CDBG_ERROR("%s:mm_camera_lib_send_command() err=%d\n", __func__, rc);
               goto ERROR;
           }
           break;
@@ -2043,7 +2034,7 @@ static int submain()
     }
 
     usleep(1000 * 1000);
-    LOGD("action_id = %d\n", action_id);
+    CDBG("action_id = %d\n", action_id);
 
   } while (action_id != ACTION_EXIT);
   action_id = ACTION_NO_ACTION;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, The Linux Foundataion. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -27,9 +27,8 @@
 *
 */
 
-// Camera dependencies
-#include "mm_qcamera_app.h"
 #include "mm_qcamera_dbg.h"
+#include "mm_qcamera_app.h"
 
 int mm_camera_queue_init(mm_camera_queue_t *queue,
                          release_data_fn data_rel_fn,
@@ -85,7 +84,7 @@ int mm_qcamera_queue_enqueue(mm_camera_queue_t *queue, void *data)
     camera_q_node *node =
         (camera_q_node *)malloc(sizeof(camera_q_node));
     if (NULL == node) {
-        LOGE(" No memory for camera_q_node");
+        CDBG_ERROR("%s: No memory for camera_q_node", __func__);
         return 0;
     }
 

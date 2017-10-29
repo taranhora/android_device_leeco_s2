@@ -91,6 +91,10 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     android.hardware.wifi@1.0-service
 
+# Netutils
+PRODUCT_PACKAGES += \
+    android.system.net.netd@1.0
+
 # Power
 PRODUCT_PACKAGES += \
     android.hardware.power@1.0-impl

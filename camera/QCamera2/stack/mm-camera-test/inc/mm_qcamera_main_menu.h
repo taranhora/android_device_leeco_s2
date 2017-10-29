@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -30,7 +30,6 @@
 #ifndef __MM_QCAMERA_MAIN_MENU_H__
 #define __MM_QCAMERA_MAIN_MENU_H__
 
-// Camera dependencies
 #include "mm_camera_interface.h"
 #include "mm_jpeg_interface.h"
 
@@ -56,7 +55,7 @@ typedef enum
   SET_TINTLESS_DISABLE,
   SET_EXP_METERING,
   GET_CTRL_VALUE,
-  TOGGLE_EZTUNE,
+  TOGGLE_AFR,
   SET_ISO,
   BRIGHTNESS_GOTO_SUBMENU,
   CONTRAST_GOTO_SUBMENU,
@@ -88,7 +87,6 @@ typedef enum
   ACTION_SET_EXP_METERING,
   ACTION_GET_CTRL_VALUE,
   ACTION_TOGGLE_AFR,
-  ACTION_TOGGLE_EZTUNE,
   ACTION_SET_ISO,
   ACTION_BRIGHTNESS_INCREASE,
   ACTION_BRIGHTNESS_DECREASE,

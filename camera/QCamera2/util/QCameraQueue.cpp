@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -27,16 +27,9 @@
 *
 */
 
-// System dependencies
-#include <string.h>
 #include <utils/Errors.h>
-
-// Camera dependencies
+#include <utils/Log.h>
 #include "QCameraQueue.h"
-
-extern "C" {
-#include "mm_camera_dbg.h"
-}
 
 namespace qcamera {
 
@@ -147,7 +140,7 @@ bool QCameraQueue::enqueue(void *data)
     camera_q_node *node =
         (camera_q_node *)malloc(sizeof(camera_q_node));
     if (NULL == node) {
-        LOGE("No memory for camera_q_node");
+        ALOGE("%s: No memory for camera_q_node", __func__);
         return false;
     }
 
@@ -184,7 +177,7 @@ bool QCameraQueue::enqueueWithPriority(void *data)
     camera_q_node *node =
         (camera_q_node *)malloc(sizeof(camera_q_node));
     if (NULL == node) {
-        LOGE("No memory for camera_q_node");
+        ALOGE("%s: No memory for camera_q_node", __func__);
         return false;
     }
 

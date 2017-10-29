@@ -8,8 +8,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "private/bionic_futex.h"
-#include "private/bionic_time_conversions.h"
+#include "bionic_futex.h"
+#include "bionic_time_conversions.h"
 
 #define COND_SHARED_MASK 0x0001
 #define COND_CLOCK_MASK 0x0002

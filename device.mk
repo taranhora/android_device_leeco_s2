@@ -86,7 +86,6 @@ PRODUCT_PACKAGES += \
     libtinyxml \
     tinymix
 
-# Audio
 PRODUCT_PACKAGES += \
     audio.primary.msm8952 \
     audio_amplifier.msm8952
@@ -114,11 +113,6 @@ PRODUCT_COPY_FILES +=  \
 PRODUCT_COPY_FILES +=  \
     $(LOCAL_PATH)/audio/audio_output_policy.conf:system/vendor/etc/audio_output_policy.conf
 
-# Assertive Display
-PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/configs/ad_calib.cfg:system/etc/ad_calib.cfg
-
-# Sound trigger
 PRODUCT_COPY_FILES +=  \
     $(LOCAL_PATH)/audio/sound_trigger_mixer_paths.xml:system/etc/sound_trigger_mixer_paths.xml \
     $(LOCAL_PATH)/audio/sound_trigger_mixer_paths_wcd9306.xml:system/etc/sound_trigger_mixer_paths_wcd9306.xml \
@@ -126,27 +120,22 @@ PRODUCT_COPY_FILES +=  \
     $(LOCAL_PATH)/audio/sound_trigger_mixer_paths_wcd9335.xml:system/etc/sound_trigger_mixer_paths_wcd9335.xml \
     $(LOCAL_PATH)/audio/sound_trigger_platform_info.xml:system/etc/sound_trigger_platform_info.xml
 
-# Dolby
 PRODUCT_COPY_FILES +=  \
     $(LOCAL_PATH)/audio/dax-default.xml:system/vendor/etc/dolby/dax-default.xml
-
-# ANT+
-PRODUCT_PACKAGES += \
-    AntHalService \
-    com.dsi.ant.antradio_library \
-    libantradio
-
-PRODUCT_COPY_FILES += \
-    external/ant-wireless/antradio-library/com.dsi.ant.antradio_library.xml:system/etc/permissions/com.dsi.ant.antradio_library.xml
 
 # Camera
 PRODUCT_PACKAGES += \
     Snap \
-    camera.msm8952.so
+    camera.msm8952
 
 # Bluetooth
 PRODUCT_PACKAGES += \
     libbt-vendor
+
+# Netutils
+PRODUCT_PACKAGES += \
+    netutils-wrapper-1.0 \
+    libandroid_net
 
 # Launcher
 PRODUCT_PACKAGES += \
@@ -165,7 +154,11 @@ PRODUCT_PACKAGES += \
     liboverlay \
     libgenlock
 
-# Display / OpenGLES
+# Assertive Display
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/configs/ad_calib.cfg:system/etc/ad_calib.cfg
+
+# OpenGLES
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.opengles.version=196610 \
     ro.sf.lcd_density=420
@@ -204,7 +197,8 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     libshims_camera \
     libshims_ims \
-    rild_socket
+    libshims_rild_socket \
+    libshims_is_wifi_driver_loaded
 
 # Lights
 PRODUCT_PACKAGES += \
@@ -361,6 +355,6 @@ endif
 
 PRODUCT_BUILD_PROP_OVERRIDES += BUILD_UTC_DATE=0
 
-# Product Model
-PRODUCT_PROPERTY_OVERRIDES += \
-    ro.product.model = X526
+# Model is set via init library
+PRODUCT_SYSTEM_PROPERTY_BLACKLIST := \
+    ro.product.model
