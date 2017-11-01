@@ -517,7 +517,7 @@ int QCamera2Factory::openLegacy(
 #define SYSFS_FLASH_PATH_BRIGHTNESS "/sys/class/leds/led:torch_0/brightness"
 #define SYSFS_FLASH_PATH_ENABLE "/sys/class/leds/led:switch/brightness"
  
-int QCamera2Factory::setTorchMode(const char* camera_id, bool on)
+int QCamera2Factory::setTorchMode(__attribute__((unused)) const char* camera_id, bool on)
 {
     int retVal(0);
     int fd_brightness(-1);
