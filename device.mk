@@ -141,10 +141,6 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
    Launcher3
 
-# CMActions
-PRODUCT_PACKAGES += \
-    CMActions
-
 # Display
 PRODUCT_PACKAGES += \
     gralloc.msm8952 \
@@ -197,8 +193,7 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     libshims_camera \
     libshims_ims \
-    libshims_rild_socket \
-    libshims_is_wifi_driver_loaded
+    libshims_rild_socket
 
 # Lights
 PRODUCT_PACKAGES += \
