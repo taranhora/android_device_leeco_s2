@@ -169,8 +169,8 @@ PRODUCT_PROPERTY_OVERRIDES += \
     ro.sf.lcd_density=420
 
 # Doze mode
-PRODUCT_PACKAGES += \
-    Doze
+#PRODUCT_PACKAGES += \
+  #  Doze
 
 # Ebtables
 PRODUCT_PACKAGES += \
