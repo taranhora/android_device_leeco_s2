@@ -6,11 +6,11 @@ TARGET_SCREEN_HEIGHT := 1920
 $(call inherit-product, device/leeco/s2/full_s2.mk)
 
 # Inherit some common LineageOS stuff.
-$(call inherit-product, vendor/lineage/config/common_full_phone.mk)
+$(call inherit-product, vendor/aoscp/configs/common_full_phone.mk)
 
 ## Device identifier. This must come after all inclusions
 PRODUCT_DEVICE := s2
-PRODUCT_NAME := lineage_s2
+PRODUCT_NAME := aoscp_s2
 PRODUCT_BRAND := LeEco
 PRODUCT_MANUFACTURER := LeMobile
 
